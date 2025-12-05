@@ -9,8 +9,8 @@ app.use(bodyParser.json());
 app.use(express.static('public')); // serve HTML/CSS/JS
 
 // Environment variables
-const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'YOUR_ADMIN_PASSWORD';
+const BOT_TOKEN = process.env.BOT_TOKEN || '8596462347:AAF8B11EYoPKaaVFQgzC2dvIDcAKkPc4ybQ';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'forgetme';
 const PORT = process.env.PORT || 3000;
 
 // Telegram Bot
