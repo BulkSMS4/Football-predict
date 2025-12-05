@@ -1,50 +1,81 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
+const TelegramBot = require('node-telegram-bot-api');
 
 const app = express();
 const port = process.env.PORT || 10000;
 
-// Parse JSON bodies
-app.use(bodyParser.json());
+// -------------------------
+// CONFIGURATION
+// -------------------------
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'mypassword123'; // store in Render secrets
+const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN_HERE'; // store securely
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// Serve all static files from the 'public' folder
+// -------------------------
+// MIDDLEWARE
+// -------------------------
+app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- Example API routes ---
+// -------------------------
+// PASSWORD-PROTECTED DASHBOARD
+// Access via: /admin?password=SECRET
+// -------------------------
+app.get('/admin', (req, res) => {
+  const password = req.query.password;
+  if (!password || password !== ADMIN_PASSWORD) {
+    return res.status(401).send('<h2>Unauthorized: Wrong password</h2>');
+  }
+  res.sendFile(path.join(__dirname, 'public', 'telegram_admin.html'));
+});
 
-// Health check
+// -------------------------
+// HEALTH CHECK
+// -------------------------
 app.get('/api', (req, res) => {
   res.json({ status: 'Football Predict Bot API is running ✅' });
 });
 
-// Example POST predict endpoint
-app.post('/api/predict', (req, res) => {
-  const { match, date } = req.body;
+// -------------------------
+// RECEIVE TIPS FROM ADMIN DASHBOARD
+// -------------------------
+app.post('/api/sendTip', (req, res) => {
+  const { target, text, meta } = req.body;
 
-  if (!match || !date) {
-    return res.status(400).json({ error: 'Missing match or date in request body' });
+  if (!target || !text) {
+    return res.status(400).json({ error: 'Missing target or text' });
   }
 
-  // Example prediction logic (replace with your real logic)
-  const prediction = {
-    match,
-    date,
-    winner: 'TeamA', 
-    score: '2-1',
-  };
-
-  res.json(prediction);
+  // Send tip via Telegram bot
+  bot.sendMessage(target, text).then(() => {
+    console.log('Tip sent:', { target, text, meta });
+    res.json({ success: true, message: 'Tip sent successfully', payload: { target, text, meta } });
+  }).catch(err => {
+    console.error('Error sending tip:', err);
+    res.status(500).json({ success: false, error: err.message });
+  });
 });
 
-// --- Serve admin dashboard ---
-// Access it via: /telegram_admin.html
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'telegram_admin.html'));
+// -------------------------
+// TELEGRAM BOT COMMANDS
+// -------------------------
+bot.onText(/\/admin/, (msg) => {
+  const chatId = msg.chat.id;
+  const url = `https://football-predict-k7yp.onrender.com/admin?password=${ADMIN_PASSWORD}`;
+  bot.sendMessage(chatId, `🔑 Open the admin dashboard here: [Click Here](${url})`, { parse_mode: 'Markdown' });
 });
 
-// Start the server
+// Optional: Health check via bot
+bot.onText(/\/status/, (msg) => {
+  bot.sendMessage(msg.chat.id, '✅ Football Predict Bot API is running.');
+});
+
+// -------------------------
+// START SERVER
+// -------------------------
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
-  console.log(`Admin dashboard: http://localhost:${port}/telegram_admin.html`);
+  console.log(`Admin dashboard (password protected): http://localhost:${port}/admin?password=${ADMIN_PASSWORD}`);
 });
