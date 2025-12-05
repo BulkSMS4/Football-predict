@@ -1,17 +1,16 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
-const TelegramBot = require('node-telegram-bot-api');
+require('dotenv').config();  // If you want to use a .env file locally
+const bot = require('./bot');
 
 const app = express();
 const port = process.env.PORT || 10000;
 
 // -------------------------
-// CONFIGURATION
+// CONFIG
 // -------------------------
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'mypassword123'; // store in Render secrets
-const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN_HERE'; // store securely
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'defaultPassword123';
 
 // -------------------------
 // MIDDLEWARE
@@ -49,27 +48,15 @@ app.post('/api/sendTip', (req, res) => {
   }
 
   // Send tip via Telegram bot
-  bot.sendMessage(target, text).then(() => {
-    console.log('Tip sent:', { target, text, meta });
-    res.json({ success: true, message: 'Tip sent successfully', payload: { target, text, meta } });
-  }).catch(err => {
-    console.error('Error sending tip:', err);
-    res.status(500).json({ success: false, error: err.message });
-  });
-});
-
-// -------------------------
-// TELEGRAM BOT COMMANDS
-// -------------------------
-bot.onText(/\/admin/, (msg) => {
-  const chatId = msg.chat.id;
-  const url = `https://football-predict-k7yp.onrender.com/admin?password=${ADMIN_PASSWORD}`;
-  bot.sendMessage(chatId, `🔑 Open the admin dashboard here: [Click Here](${url})`, { parse_mode: 'Markdown' });
-});
-
-// Optional: Health check via bot
-bot.onText(/\/status/, (msg) => {
-  bot.sendMessage(msg.chat.id, '✅ Football Predict Bot API is running.');
+  bot.sendMessage(target, text)
+    .then(() => {
+      console.log('Tip sent:', { target, text, meta });
+      res.json({ success: true, message: 'Tip sent successfully', payload: { target, text, meta } });
+    })
+    .catch(err => {
+      console.error('Error sending tip:', err);
+      res.status(500).json({ success: false, error: err.message });
+    });
 });
 
 // -------------------------
