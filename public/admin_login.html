@@ -5,30 +5,40 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Admin Login</title>
 <style>
-  body { display:flex; align-items:center; justify-content:center; height:100vh; font-family:Arial, sans-serif; background:#0f1724; color:#fff; }
-  .login-box { background:#0b1220; padding:30px; border-radius:12px; text-align:center; width:300px; }
-  input { width:100%; padding:10px; margin:12px 0; border-radius:8px; border:none; }
-  button { width:100%; padding:10px; border:none; border-radius:8px; background:#06b6d4; color:#022; font-weight:600; cursor:pointer; }
+  body { display:flex; align-items:center; justify-content:center; height:100vh; font-family:Arial, sans-serif; background:#0f1724; color:#fff; margin:0; }
+  .login-box { background:#0b1220; padding:30px; border-radius:12px; text-align:center; width:320px; box-shadow:0 6px 18px rgba(0,0,0,0.5);}
+  input { width:100%; padding:10px; margin:12px 0; border-radius:8px; border:none; font-size:14px; }
+  button { width:100%; padding:10px; border:none; border-radius:8px; background:#06b6d4; color:#022; font-weight:600; cursor:pointer; font-size:14px; }
+  img.logo { width:80px; height:80px; margin-bottom:15px; border-radius:12px; }
+  h2 { margin:8px 0 12px 0; font-size:22px; }
+  p#error { color:#ef4444; font-size:14px; margin-top:8px; }
 </style>
 </head>
 <body>
   <div class="login-box">
+    <!-- Admin Logo -->
+    <img class="logo" src="logo.png" alt="Admin Logo" />
     <h2>Admin Login</h2>
     <input type="password" id="password" placeholder="Enter password" />
     <button onclick="checkPassword()">Login</button>
-    <p id="error" style="color:#ef4444;font-size:14px;"></p>
+    <p id="error"></p>
   </div>
 
   <script>
     function checkPassword() {
       const password = document.getElementById('password').value;
-      const adminPassword = '{{ADMIN_PASSWORD}}'; // will be replaced by server
+      const adminPassword = '{{ADMIN_PASSWORD}}'; // Replaced by server
       if (password === adminPassword) {
-        window.location.href = '/dashboard'; // secure route to real dashboard
+        window.location.href = '/dashboard';
       } else {
         document.getElementById('error').textContent = 'Incorrect password!';
       }
     }
+
+    // Optional: Enter key triggers login
+    document.getElementById('password').addEventListener('keyup', function(e){
+      if(e.key === 'Enter') checkPassword();
+    });
   </script>
 </body>
 </html>
