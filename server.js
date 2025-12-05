@@ -52,19 +52,28 @@ app.post('/api/subscribe', (req,res)=>{
 // API: Send tip
 app.post('/api/sendTip', (req,res)=>{
   const { target, text, meta } = req.body;
-  // Send to all active subscribers if VIP
+  const now = new Date();
+
   if(meta.postType === 'vip'){
-    const now = new Date();
+    // Only send to active subscribers
     subscribers.forEach(s => {
       if(s.active && new Date(s.expiry) > now){
         bot.sendMessage(s.chatId, `💎 VIP TIP\n\n${text}`);
       }
     });
+  } else {
+    // Send free tips to everyone or channel
+    if(target){
+      bot.sendMessage(target, text).catch(console.log);
+    }
   }
-  // Send to a specific channel or free tips
-  if(target){
-    bot.sendMessage(target, text).catch(console.log);
+  // Notify all active subscribers about new game if free
+  if(meta.postType === 'free'){
+    subscribers.forEach(s => {
+      if(s.active) bot.sendMessage(s.chatId, `🆓 New Game Tip:\n\n${text}`);
+    });
   }
+
   res.json({ success:true });
 });
 
@@ -74,8 +83,12 @@ setInterval(()=>{
   subscribers.forEach(s => {
     if(s.active){
       const diff = (new Date(s.expiry) - now)/(1000*60*60*24);
-      if(diff <=0){ s.active=false; bot.sendMessage(s.chatId, '⛔ Your VIP subscription expired. Please renew.'); }
-      else if(diff <=1){ bot.sendMessage(s.chatId, `⚠️ VIP subscription expiring soon (${diff.toFixed(1)} days)`); }
+      if(diff <=0){
+        s.active=false;
+        bot.sendMessage(s.chatId, '⛔ Your VIP subscription expired. Please renew.');
+      } else if(diff <=1){
+        bot.sendMessage(s.chatId, `⚠️ VIP subscription expiring soon (${diff.toFixed(1)} days)`);
+      }
     }
   });
   saveSubscribers();
