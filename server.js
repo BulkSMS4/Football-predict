@@ -1,26 +1,23 @@
+// server.js
 const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
-require('dotenv').config();  // If you want to use a .env file locally
+require('dotenv').config(); // For local .env
 const bot = require('./bot');
 
 const app = express();
 const port = process.env.PORT || 10000;
 
-// -------------------------
-// CONFIG
-// -------------------------
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'defaultPassword123';
 
 // -------------------------
-// MIDDLEWARE
+// Middleware
 // -------------------------
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // -------------------------
-// PASSWORD-PROTECTED DASHBOARD
-// Access via: /admin?password=SECRET
+// Password-protected admin dashboard
 // -------------------------
 app.get('/admin', (req, res) => {
   const password = req.query.password;
@@ -31,23 +28,20 @@ app.get('/admin', (req, res) => {
 });
 
 // -------------------------
-// HEALTH CHECK
+// Health check
 // -------------------------
 app.get('/api', (req, res) => {
   res.json({ status: 'Football Predict Bot API is running ✅' });
 });
 
 // -------------------------
-// RECEIVE TIPS FROM ADMIN DASHBOARD
+// Receive tips from dashboard
 // -------------------------
 app.post('/api/sendTip', (req, res) => {
   const { target, text, meta } = req.body;
 
-  if (!target || !text) {
-    return res.status(400).json({ error: 'Missing target or text' });
-  }
+  if (!target || !text) return res.status(400).json({ error: 'Missing target or text' });
 
-  // Send tip via Telegram bot
   bot.sendMessage(target, text)
     .then(() => {
       console.log('Tip sent:', { target, text, meta });
@@ -60,9 +54,9 @@ app.post('/api/sendTip', (req, res) => {
 });
 
 // -------------------------
-// START SERVER
+// Start server
 // -------------------------
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
-  console.log(`Admin dashboard (password protected): http://localhost:${port}/admin?password=${ADMIN_PASSWORD}`);
+  console.log(`Admin dashboard: http://localhost:${port}/admin?password=${ADMIN_PASSWORD}`);
 });
