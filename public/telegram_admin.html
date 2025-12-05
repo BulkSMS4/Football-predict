@@ -1,194 +1,280 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Telegram Admin — MatchIQ</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Telegram Tips Admin — MatchIQ</title>
 <style>
-:root{
+:root {
   --bg:#0f1724;
   --card:#0b1220;
   --muted:#94a3b8;
   --accent:#06b6d4;
   --good:#10b981;
-  --warn:#facc15;
   --danger:#ef4444;
 }
-body{
-  font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
-  background:linear-gradient(180deg,#071029 0%, #071b2b 100%);
-  color:#e6eef6;margin:0;padding:24px;
+body {
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial;
+  background: linear-gradient(180deg,#071029 0%, #071b2b 100%);
+  color: #e6eef6;
+  margin: 0;
+  padding: 24px;
 }
-.container{max-width:1100px;margin:0 auto;}
-header{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
-header h1{font-size:20px;margin:0;}
-.card{
-  background:rgba(255,255,255,0.03);
-  padding:16px;
-  border-radius:12px;
-  margin-bottom:12px;
-  box-shadow:0 6px 18px rgba(2,6,23,0.6);
+.container { max-width: 980px; margin:0 auto; }
+header { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+header img { width:44px; height:44px; border-radius:8px; background:linear-gradient(135deg,#06b6d4,#0ea5a4); }
+header h1 { font-size:20px; margin:0; }
+.card { background: rgba(255,255,255,0.03); padding:16px; border-radius:12px; margin-bottom:12px; box-shadow:0 6px 18px rgba(2,6,23,0.6); }
+label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+input[type="text"], textarea, select {
+  width:100%; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.06);
+  background:transparent; color:inherit; font-size:14px; box-sizing:border-box;
 }
-label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;}
-input[type="text"],textarea,select{
-  width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);
-  background:transparent;color:inherit;font-size:14px;box-sizing:border-box;
-}
-textarea{min-height:90px;resize:vertical;}
-button{
-  background:var(--accent);color:#022;border:none;padding:10px 12px;border-radius:8px;
-  cursor:pointer;font-weight:600;
-}
-button.danger{background:var(--danger);}
-button.success{background:var(--good);}
-.small{font-size:13px;color:var(--muted);}
-.grid{display:grid;grid-template-columns:2fr 1fr;gap:12px;}
-.sub-list{max-height:250px;overflow:auto;margin-top:8px;}
-.sub-item{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;font-size:13px;}
-.badge{padding:2px 6px;border-radius:6px;font-size:12px;color:#022;}
-.badge.active{background:var(--good);}
-.badge.expired{background:var(--danger);}
-.badge.warn{background:var(--warn);}
+textarea { min-height:90px; resize:vertical; }
+.grid { display:grid; grid-template-columns:1fr 350px; gap:12px; }
+.row { display:flex; gap:8px; flex-wrap:wrap; }
+button { background:var(--accent); color:#022; border:none; padding:10px 12px; border-radius:8px; cursor:pointer; font-weight:600; }
+.muted { color:var(--muted); font-size:13px; }
+.preview { white-space:pre-wrap; background:rgba(0,0,0,0.25); padding:12px; border-radius:8px; border:1px dashed rgba(255,255,255,0.04); }
+.history-item { padding:8px; border-radius:8px; background:rgba(255,255,255,0.02); margin-bottom:8px; font-size:13px; }
+.small { font-size:13px; color:var(--muted); }
+.danger { background:var(--danger); color:#fff; }
+.success { background:var(--good); color:#022; }
+.sub-list { max-height:250px; overflow:auto; }
+.sub-item { padding:6px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; justify-content:space-between; align-items:center; }
+.sub-item span { font-size:13px; }
 </style>
 </head>
 <body>
 <div class="container">
   <header>
-    <img src="" alt="Admin Logo" style="width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,#06b6d4,#0ea5a4)"/>
+    <img src="https://i.imgur.com/5Qf8h3p.png" alt="Admin Logo" />
     <div>
-      <h1>Telegram Admin — MatchIQ</h1>
-      <div class="small">Manage tips, VIP subscriptions, and subscribers</div>
+      <h1>Telegram Tips Admin — MatchIQ</h1>
+      <div class="small">Compose free / VIP tips, preview and manage subscribers</div>
     </div>
   </header>
 
   <div class="grid">
-    <!-- LEFT: Compose Tips -->
+    <!-- LEFT: Tip Builder -->
     <div>
       <div class="card">
         <label>Post Type</label>
         <select id="postType">
           <option value="free">Free Tip</option>
           <option value="vip">VIP Tip</option>
+          <option value="result">Result / Update</option>
+          <option value="announcement">Announcement</option>
         </select>
 
-        <label style="margin-top:12px">Match (Title)</label>
-        <input id="match" placeholder="Arsenal vs Brighton">
+        <label style="margin-top:12px">Match (title)</label>
+        <input id="match" placeholder="Arsenal vs Brighton" />
 
-        <label style="margin-top:12px">Analysis / Tip</label>
-        <textarea id="analysis" placeholder="Key points or score tips"></textarea>
+        <label style="margin-top:12px">Analysis (short)</label>
+        <textarea id="analysis" placeholder="Key points: Home form, injuries, xG..." ></textarea>
 
-        <label style="margin-top:12px">Extra Notes (Optional)</label>
-        <input id="notes" placeholder="VIP small stake, etc.">
+        <label style="margin-top:12px">Tip / Correct Score</label>
+        <input id="tip" placeholder="Correct Score — 2-1 or Over 2.5" />
 
         <div style="display:flex;gap:8px;margin-top:12px">
+          <div style="flex:1">
+            <label>Confidence</label>
+            <select id="confidence">
+              <option>Low</option>
+              <option selected>Medium</option>
+              <option>High</option>
+            </select>
+          </div>
+          <div style="width:140px">
+            <label>Kickoff (local/GMT)</label>
+            <input id="kickoff" type="text" placeholder="20:00 GMT" />
+          </div>
+        </div>
+
+        <label style="margin-top:12px">Extra Notes (optional)</label>
+        <input id="notes" placeholder="e.g. Stake: 1/10, Only for VIP" />
+
+        <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
           <button id="previewBtn">Preview</button>
           <button id="sendBtn">Send</button>
-          <button id="saveBtn" class="success">Save Locally</button>
-          <button id="clearBtn" class="danger">Clear</button>
+          <button id="saveBtn" style="background:#334155">Save Locally</button>
+          <button id="clearBtn" class="danger">Clear Form</button>
         </div>
 
         <div style="margin-top:10px" class="small">
-          VIP tips are sent only to active subscribers. Free tips go to all users.
+          <strong>Note:</strong> This admin posts to <code>/api/sendTip</code> on your server. Keep your bot token on the server.
         </div>
+      </div>
 
-        <div style="margin-top:10px">
-          <label>Preview</label>
-          <div id="preview" style="white-space:pre-wrap;background:rgba(0,0,0,0.25);padding:12px;border-radius:8px;border:1px dashed rgba(255,255,255,0.04)">
-            Fill the form and click Preview
-          </div>
+      <!-- History -->
+      <div class="card">
+        <label>Local History</label>
+        <div id="historyList" style="margin-top:10px;max-height:260px;overflow:auto"></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button id="clearHistory" style="background:#334155">Clear History</button>
+          <button id="exportHistory" style="background:#0ea5a4">Export JSON</button>
         </div>
       </div>
     </div>
 
-    <!-- RIGHT: Subscriber List -->
+    <!-- RIGHT: Preview + Subscribers -->
     <div>
       <div class="card">
-        <label>Subscribers</label>
-        <div id="subList" class="sub-list">Loading subscribers...</div>
+        <label>Preview</label>
+        <div id="preview" class="preview">Fill the form and click Preview</div>
+      </div>
+
+      <div class="card">
+        <label>Subscriber List</label>
+        <div class="sub-list" id="subList">Loading...</div>
+      </div>
+
+      <div class="card">
+        <label>Last Server Response</label>
+        <pre id="serverResp" class="preview">No requests yet.</pre>
+      </div>
+
+      <div class="card">
+        <label>Disclaimer</label>
+        <div class="small">
+          All predictions are opinions based on analysis and statistics. No guaranteed outcomes. Bet responsibly.
+        </div>
       </div>
     </div>
   </div>
+
+  <footer style="margin-top:14px;text-align:center;color:var(--muted);font-size:13px">
+    Built for MatchIQ • Keep your bot token on your server • © Your Brand
+  </footer>
 </div>
 
 <script>
 const postTypeEl = document.getElementById('postType');
 const matchEl = document.getElementById('match');
 const analysisEl = document.getElementById('analysis');
+const tipEl = document.getElementById('tip');
+const confidenceEl = document.getElementById('confidence');
+const kickoffEl = document.getElementById('kickoff');
 const notesEl = document.getElementById('notes');
 const previewEl = document.getElementById('preview');
-const subListEl = document.getElementById('subList');
+const serverRespEl = document.getElementById('serverResp');
+const historyList = document.getElementById('historyList');
+const subList = document.getElementById('subList');
 
-async function loadSubscribers(){
-  try{
-    const res = await fetch('/subscribers.json');
-    const subs = await res.json();
-    renderSubscribers(subs);
-  }catch(e){
-    subListEl.innerHTML='Failed to load subscribers';
-  }
-}
+let history = JSON.parse(localStorage.getItem('tipHistory')||'[]');
+renderHistory();
 
-function renderSubscribers(subs){
-  subListEl.innerHTML='';
-  subs.forEach(s=>{
-    const now = new Date();
-    const expiry = new Date(s.expiry);
-    let badgeClass='active', badgeText='Active';
-    const diffDays = (expiry-now)/(1000*60*60*24);
-    if(!s.active) { badgeClass='expired'; badgeText='Expired'; }
-    else if(diffDays<=1) { badgeClass='warn'; badgeText='Expiring Soon'; }
+// Build post text
+function buildPost() {
+  const postType = postTypeEl.value;
+  let lines = [];
+  if(postType==='announcement') lines.push('📢 ANNOUNCEMENT');
+  if(postType==='vip') lines.push('💎 VIP ANALYSIS');
+  if(postType==='free') lines.push('🆓 FREE TIP');
+  if(postType==='result') lines.push('✅ RESULT');
 
-    const div = document.createElement('div');
-    div.className='sub-item';
-    div.innerHTML=`
-      <div><strong>${s.username}</strong> (${s.type})</div>
-      <div>
-        <span class="badge ${badgeClass}">${badgeText}</span>
-      </div>
-    `;
-    subListEl.appendChild(div);
-  });
+  if(matchEl.value) lines.push('⚽ Match: '+matchEl.value);
+  if(analysisEl.value) lines.push('📊 Analysis: '+analysisEl.value);
+  if(tipEl.value) lines.push('🎯 Tip: '+tipEl.value);
+  if(confidenceEl.value) lines.push('📈 Confidence: '+confidenceEl.value);
+  if(kickoffEl.value) lines.push('🕒 Kickoff: '+kickoffEl.value);
+  if(notesEl.value) lines.push('📝 Notes: '+notesEl.value);
+
+  lines.push('\n⚠️ Disclaimer: All tips are predictions based on analysis. No guarantees. Bet responsibly.');
+  return lines.join('\n');
 }
 
 // Preview
 document.getElementById('previewBtn').addEventListener('click', ()=>{
-  let lines=[];
-  const postType = postTypeEl.value;
-  if(postType==='vip') lines.push('💎 VIP TIP');
-  else lines.push('🆓 FREE TIP');
-  if(matchEl.value) lines.push('⚽ Match: '+matchEl.value);
-  if(analysisEl.value) lines.push('📊 Analysis: '+analysisEl.value);
-  if(notesEl.value) lines.push('📝 Notes: '+notesEl.value);
-  lines.push('\n⚠️ Disclaimer: All tips are predictions. No guarantees. Bet responsibly.');
-  previewEl.textContent = lines.join('\n');
+  previewEl.textContent = buildPost();
 });
+
+// Save history
+document.getElementById('saveBtn').addEventListener('click', ()=>{
+  const item = {
+    id: Date.now(),
+    postType: postTypeEl.value,
+    match: matchEl.value,
+    analysis: analysisEl.value,
+    tip: tipEl.value,
+    confidence: confidenceEl.value,
+    kickoff: kickoffEl.value,
+    notes: notesEl.value,
+    text: buildPost()
+  };
+  history.unshift(item);
+  if(history.length>200) history.pop();
+  localStorage.setItem('tipHistory', JSON.stringify(history));
+  renderHistory();
+  alert('Saved locally.');
+});
+
+function renderHistory(){
+  historyList.innerHTML='';
+  if(history.length===0){ historyList.innerHTML='<div class="small">No saved posts yet.</div>'; return; }
+  history.forEach(h=>{
+    const d = document.createElement('div'); d.className='history-item';
+    d.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+      <div><strong>${escapeHtml(h.match||h.postType)}</strong><div class="small">${escapeHtml(h.postType)} • ${new Date(h.id).toLocaleString()}</div></div>
+      <div style="display:flex;gap:6px">
+        <button onclick='useHistory(${h.id})'>Load</button>
+        <button onclick='sendFromHistory(${h.id})' style="background:#0ea5a4">Send</button>
+      </div>
+    </div>
+    <div style="margin-top:8px" class="small">${escapeHtml(h.text)}</div>`;
+    historyList.appendChild(d);
+  });
+}
+
+// Load history
+window.useHistory = function(id){
+  const h = history.find(x=>x.id===id);
+  if(!h) return alert('Not found');
+  matchEl.value=h.match||'';
+  analysisEl.value=h.analysis||'';
+  tipEl.value=h.tip||'';
+  confidenceEl.value=h.confidence||'Medium';
+  kickoffEl.value=h.kickoff||'';
+  notesEl.value=h.notes||'';
+  postTypeEl.value=h.postType||'free';
+  previewEl.textContent=buildPost();
+}
 
 // Send tip
 document.getElementById('sendBtn').addEventListener('click', async ()=>{
-  const text = previewEl.textContent;
-  const postType = postTypeEl.value;
-  try{
+  const payload = { text: buildPost(), target: '@your_channel' };
+  try {
+    serverRespEl.textContent='Sending...';
     const res = await fetch('/api/sendTip',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        target:'', text, meta:{ postType, match:matchEl.value, notes:notesEl.value }
-      })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
-    alert('Tip sent successfully!');
-  }catch(e){
-    alert('Failed to send tip');
-  }
+    serverRespEl.textContent=JSON.stringify(data,null,2);
+  } catch(err){ serverRespEl.textContent='Error: '+err.message; }
 });
 
-// Clear form
-document.getElementById('clearBtn').addEventListener('click', ()=>{
-  matchEl.value=''; analysisEl.value=''; notesEl.value='';
-  previewEl.textContent='Fill the form and click Preview';
-});
+// Escape HTML
+function escapeHtml(str=''){ return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+
+// Subscriber list
+async function loadSubscribers(){
+  try {
+    const res = await fetch('/api/subscribers');
+    const data = await res.json();
+    subList.innerHTML='';
+    if(data.length===0){ subList.innerHTML='<div class="small">No subscribers yet.</div>'; return; }
+    data.forEach(s=>{
+      const d = document.createElement('div'); d.className='sub-item';
+      d.innerHTML=`<span>${s.username || s.id} (${s.subscriptionType})</span><span>Expires: ${new Date(s.endDate).toLocaleString()}</span>`;
+      subList.appendChild(d);
+    });
+  } catch(err){ subList.innerHTML='Failed to load subscribers'; }
+}
 
 loadSubscribers();
+setInterval(loadSubscribers, 60*1000); // Refresh every minute
 </script>
 </body>
 </html>
