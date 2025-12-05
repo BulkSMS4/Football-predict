@@ -1,213 +1,67 @@
+// server.js
+require('dotenv').config();
 const express = require('express');
+const bodyParser = require('body-parser');
 const fs = require('fs');
-const TelegramBot = require('node-telegram-bot-api');
+const path = require('path');
 
 const app = express();
-app.use(express.json());
+app.use(bodyParser.json());
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_ID = process.env.ADMIN_ID;
+const PORT = process.env.PORT || 3000;
 
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+// Subscribers data file
+const SUB_FILE = path.join(__dirname, 'subscribers.json');
 
-const SUB_FILE = './subscribers.json';
-const HISTORY_FILE = './history.json';
-const REF_FILE = './referrals.json';
+// Ensure subscribers file exists
+if (!fs.existsSync(SUB_FILE)) fs.writeFileSync(SUB_FILE, JSON.stringify([]));
 
-// ---------- HELPERS ----------
-const load = f => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f)) : {};
-const save = (f,d)=>fs.writeFileSync(f,JSON.stringify(d,null,2));
-const isActive = s => s && s.paid && Date.now() < s.expiry;
+// Helper functions
+function loadSubscribers() {
+  return JSON.parse(fs.readFileSync(SUB_FILE));
+}
 
-// ---------- LOAD DATA ----------
-let subs = load(SUB_FILE);
-let hist = load(HISTORY_FILE);
-let ref = load(REF_FILE);
+function saveSubscribers(data) {
+  fs.writeFileSync(SUB_FILE, JSON.stringify(data, null, 2));
+}
 
-// ---------- COMMANDS ----------
-bot.onText(/\/help/, m=>{
-  bot.sendMessage(m.chat.id,
-`📌 *Commands*
-/free – Free tips
-/subscribe – VIP plans
-/status – Subscription status
-/help – Commands
-/refer <code> – Invite friends`,
-  {parse_mode:'Markdown'});
+function findSubscriber(id) {
+  const subs = loadSubscribers();
+  return subs.find(s => s.id === id);
+}
+
+// API to get subscribers
+app.get('/api/subscribers', (req, res) => {
+  const subs = loadSubscribers();
+  res.json(subs);
 });
 
-bot.onText(/\/free/, m=>{
-  bot.sendMessage(m.chat.id,
-`🆓 *FREE TIPS*
-✅ Over 2.5 ✅
-✅ BTTS ✅
-💎 VIP gives more wins`,
-  {parse_mode:'Markdown'});
+// API to send tip to channel (called from admin dashboard)
+app.post('/api/sendTip', (req, res) => {
+  const { target, text } = req.body;
+  if (!target || !text) return res.status(400).json({ error: 'Missing target or text' });
+
+  // Send to Telegram using bot API
+  const axios = require('axios');
+  const token = process.env.BOT_TOKEN;
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  axios.post(url, { chat_id: target, text })
+    .then(r => res.json({ success: true, data: r.data }))
+    .catch(err => res.status(500).json({ error: err.message }));
 });
 
-bot.onText(/\/status/, m=>{
-  const s=subs[m.chat.id];
-  if(!isActive(s)) return bot.sendMessage(m.chat.id,'❌ No active VIP');
-  bot.sendMessage(m.chat.id,
-`✅ ACTIVE VIP
-⏳ Expires: ${new Date(s.expiry).toDateString()}`);
+// API to approve subscription (admin)
+app.post('/api/approve', (req, res) => {
+  const { id, plan, endDate } = req.body;
+  if (!id || !plan || !endDate) return res.status(400).json({ error: 'Missing fields' });
+  const subs = loadSubscribers();
+  const user = subs.find(s => s.id === id);
+  if (!user) return res.status(404).json({ error: 'Subscriber not found' });
+
+  user.subscriptionType = plan;
+  user.endDate = new Date(endDate).toISOString();
+  saveSubscribers(subs);
+  res.json({ success: true, subscriber: user });
 });
 
-bot.onText(/\/refer (.+)/, (m,match)=>{
-  const code = match[1];
-  if(!ref[code]) ref[code]={count:0};
-  ref[code].count++;
-  save(REF_FILE,ref);
-  bot.sendMessage(m.chat.id,`✅ Referral counted! You invited ${ref[code].count} friends`);
-});
-
-// ---------- SUBSCRIBE ----------
-bot.onText(/\/subscribe/, m=>{
-  bot.sendMessage(m.chat.id,'💎 VIP Subscription',{
-    parse_mode:'Markdown',
-    reply_markup:{
-      inline_keyboard:[
-        [{text:'📜 View History',callback_data:'history'}],
-        [{text:'✅ Subscribe',callback_data:'plans'}]
-      ]
-    }
-  });
-});
-
-// ---------- CALLBACK ----------
-bot.on('callback_query', q=>{
-  const id=q.message.chat.id;
-
-  // ---------------- VIEW HISTORY ----------------
-  if(q.data==='history'){
-    let msg='📊 *Past Performance*\n\n';
-    Object.values(hist).slice(-5).forEach(h=>{
-      msg+=`✅ ${h.match} — WIN ✅\n`;
-    });
-    return bot.sendMessage(id,msg||'No history',{parse_mode:'Markdown'});
-  }
-
-  // ---------------- SUBSCRIBE PLANS ----------------
-  if(q.data==='plans'){
-    return bot.sendMessage(id,'Choose Plan',{
-      reply_markup:{
-        inline_keyboard:[
-          [{text:'Daily',callback_data:'p_daily'}],
-          [{text:'Weekly',callback_data:'p_weekly'}],
-          [{text:'Monthly',callback_data:'p_monthly'}],
-          [{text:'Yearly',callback_data:'p_yearly'}]
-        ]
-      }
-    });
-  }
-
-  // ---------------- SELECT PLAN ----------------
-  if(q.data.startsWith('p_')){
-    subs[id]={ plan:q.data.split('_')[1], paid:false };
-    save(SUB_FILE,subs);
-    return bot.sendMessage(id,
-`💳 Payment Instructions:
-
-🇬🇭 Ghana MoMo: 05622504
-👤 Richard Atidepe
-
-🌍 WorldRemit/Ria → Ghana
-
-✅ Click after paying`,
-{
-      reply_markup:{inline_keyboard:[[{text:'I Paid ✅',callback_data:'paid'}]]}
-    });
-  }
-
-  // ---------------- USER PAID ----------------
-  if(q.data==='paid'){
-    bot.sendMessage(ADMIN_ID,
-`✅ Payment Alert
-User: ${id}
-Plan: ${subs[id].plan}`,
-{
-      reply_markup:{
-        inline_keyboard:[
-          [{text:'Approve',callback_data:`ok_${id}`}],
-          [{text:'Reject',callback_data:`no_${id}`}],
-          [{text:'Revoke',callback_data:`revoke_${id}`}]
-        ]
-      }
-    });
-  }
-
-  // ---------------- ADMIN APPROVE ----------------
-  if(q.data.startsWith('ok_')){
-    const uid=q.data.split('_')[1];
-    const d={daily:1,weekly:7,monthly:30,yearly:365}[subs[uid].plan];
-    subs[uid].paid=true;
-    subs[uid].expiry=Date.now()+d*86400000;
-    subs[uid].warned=false;
-    subs[uid].expired=false;
-    save(SUB_FILE,subs);
-    bot.sendMessage(uid,'✅ VIP Activated');
-  }
-
-  // ---------------- ADMIN REJECT ----------------
-  if(q.data.startsWith('no_')){
-    const uid=q.data.split('_')[1];
-    delete subs[uid];
-    save(SUB_FILE,subs);
-  }
-
-  // ---------------- ADMIN REVOKE ----------------
-  if(q.data.startsWith('revoke_')){
-    const uid=q.data.split('_')[1];
-    delete subs[uid];
-    save(SUB_FILE,subs);
-    bot.sendMessage(uid,'⛔ VIP revoked by admin');
-  }
-});
-
-// ---------- ADMIN VIP POST ----------
-bot.onText(/\/vip (.+)/, (m,match)=>{
-  if(String(m.chat.id)!==ADMIN_ID) return;
-  const text=`💎 VIP TIP\n${match[1]}`;
-
-  hist[Date.now()]={match:match[1]};
-  save(HISTORY_FILE,hist);
-
-  Object.keys(subs).forEach(uid=>{
-    if(isActive(subs[uid])){
-      bot.sendMessage(uid,`🔥 NEW VIP GAME POSTED\n\n${text}`);
-    }
-  });
-});
-
-// ---------- ADMIN BROADCAST ----------
-bot.onText(/\/broadcast (.+)/, (m,match)=>{
-  if(String(m.chat.id)!==ADMIN_ID) return;
-  Object.keys(subs).forEach(uid=>{
-    bot.sendMessage(uid,`📢 BROADCAST:\n\n${match[1]}`);
-  });
-});
-
-// ---------- EXPIRY CHECK & ALERTS ----------
-setInterval(()=>{
-  Object.keys(subs).forEach(id=>{
-    const s=subs[id];
-    if(!s.paid) return;
-
-    const left = s.expiry-Date.now();
-
-    if(left<86400000 && left>0 && !s.warned){
-      s.warned=true;
-      bot.sendMessage(id,'⏰ VIP expires in 24 hours');
-    }
-
-    if(left<=0 && !s.expired){
-      s.expired=true;
-      bot.sendMessage(id,'⛔ VIP expired. Renew to continue');
-    }
-  });
-  save(SUB_FILE,subs);
-}, 60000);
-
-// ---------- SERVER ----------
-app.get('/',(_,res)=>res.send('✅ MatchIQ Running'));
-app.listen(10000,()=>console.log('Server running'));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
