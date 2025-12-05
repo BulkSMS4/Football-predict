@@ -1,22 +1,6 @@
 {
-  "daily": [
-    { "odds": 2, "price": 50 },
-    { "odds": 5, "price": 120 },
-    { "odds": 10, "price": 250 }
-  ],
-  "weekly": [
-    { "odds": 10, "price": 350 },
-    { "odds": 20, "price": 700 },
-    { "odds": 50, "price": 1600 }
-  ],
-  "monthly": [
-    { "odds": 20, "price": 1500 },
-    { "odds": 50, "price": 3500 },
-    { "odds": 100, "price": 6500 }
-  ],
-  "yearly": [
-    { "odds": 100, "price": 7000 },
-    { "odds": 250, "price": 16000 },
-    { "odds": 500, "price": 30000 }
-  ]
+  "daily": [{"odds":2,"price":10},{"odds":5,"price":25},{"odds":50,"price":200}],
+  "weekly": [{"odds":2,"price":50},{"odds":5,"price":100},{"odds":50,"price":400}],
+  "monthly": [{"odds":2,"price":150},{"odds":5,"price":300},{"odds":50,"price":1200}],
+  "yearly": [{"odds":2,"price":1500},{"odds":5,"price":3000},{"odds":50,"price":12000}]
 }
