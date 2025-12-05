@@ -1,248 +1,179 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Telegram Tips Admin — MatchIQ</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telegram Admin Dashboard — MatchIQ</title>
 <style>
-  :root{
-    --bg:#0f1724; --card:#0b1220; --muted:#94a3b8; 
-    --accent:#06b6d4; --good:#10b981; --danger:#ef4444
-  }
-  body{
-    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
-    background:linear-gradient(180deg,#071029 0%,#071b2b 100%);
-    color:#e6eef6;margin:0;padding:24px
-  }
-  .container{max-width:980px;margin:0 auto}
-  header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
-  header h1{font-size:20px;margin:0}
-  .card{background:rgba(255,255,255,0.03);padding:16px;border-radius:12px;margin-bottom:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
-  label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
-  input[type="text"], textarea, select, input[type="time"]{
-    width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);
-    background:transparent;color:inherit;font-size:14px;box-sizing:border-box
-  }
-  textarea{min-height:90px;resize:vertical}
-  .grid{display:grid;grid-template-columns:1fr 320px;gap:12px}
-  .row{display:flex;gap:8px;flex-wrap:wrap}
-  button{background:var(--accent);color:#022;border:none;padding:10px 12px;border-radius:8px;cursor:pointer;font-weight:600}
-  .muted{color:var(--muted);font-size:13px}
-  .preview{white-space:pre-wrap;background:rgba(0,0,0,0.25);padding:12px;border-radius:8px;border:1px dashed rgba(255,255,255,0.04)}
-  .history-item{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);margin-bottom:8px;font-size:13px}
-  .small{font-size:13px;color:var(--muted)}
-  .danger{background:var(--danger);color:#fff}
-  .success{background:var(--good); color:#022}
+:root {
+  --bg: #0f1724;
+  --card: #0b1220;
+  --muted: #94a3b8;
+  --accent: #06b6d4;
+  --good: #10b981;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+}
+body {
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  background: linear-gradient(180deg,#071029 0%, #071b2b 100%);
+  color: #e6eef6;
+  margin:0;
+  padding:24px;
+}
+.container { max-width:1200px; margin:0 auto; }
+header { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+header img { width:50px; height:50px; border-radius:10px; background: linear-gradient(135deg,#06b6d4,#0ea5a4); }
+header h1 { font-size:22px; margin:0; }
+header .small { font-size:13px; color:var(--muted); }
+
+.card { background: rgba(255,255,255,0.03); padding:16px; border-radius:12px; margin-bottom:12px; box-shadow:0 6px 18px rgba(2,6,23,0.6); }
+input, select, textarea { width:100%; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.06); background:transparent; color:inherit; font-size:14px; box-sizing:border-box; }
+textarea { min-height:80px; resize:vertical; }
+button { background: var(--accent); color:#022; border:none; padding:10px 12px; border-radius:8px; cursor:pointer; font-weight:600; }
+button.danger { background: var(--danger); color:#fff; }
+button.success { background: var(--good); color:#022; }
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+table { width:100%; border-collapse:collapse; }
+th, td { padding:8px; border-bottom:1px solid rgba(255,255,255,0.1); text-align:left; font-size:13px; }
+th { color: var(--accent); }
+.status-active { color: var(--good); font-weight:600; }
+.status-expired { color: var(--danger); font-weight:600; }
+.small { font-size:13px; color: var(--muted); }
 </style>
 </head>
 <body>
+
 <div class="container">
+
   <header>
-    <img src="https://i.imgur.com/qIufhof.png" alt="Admin Logo" style="width:44px;height:44px;border-radius:8px"/>
+    <img src="" alt="Admin Logo">
     <div>
-      <h1>Telegram Tips Admin — MatchIQ</h1>
-      <div class="small">Compose free / VIP tips, preview and send to Telegram subscribers</div>
+      <h1>Telegram Admin Dashboard — MatchIQ</h1>
+      <div class="small">Manage VIP tips, subscribers, and chat logs</div>
     </div>
   </header>
 
-  <!-- SETTINGS -->
-  <div class="card">
-    <label>Target Channel or Chat ID</label>
-    <input id="target" placeholder="@matchiqanalysis" />
-    <div class="small">Channel username or chat id your server will post to.</div>
+  <!-- LOGIN -->
+  <div class="card" id="loginCard">
+    <label>Admin Password</label>
+    <input type="password" id="adminPassword" placeholder="Enter password">
+    <button id="loginBtn" style="margin-top:12px;">Login</button>
+    <div class="small" style="margin-top:6px;">Password is required to access the dashboard</div>
   </div>
 
-  <div class="grid">
-    <!-- LEFT: Tip Builder -->
-    <div>
-      <div class="card">
-        <label>Post Type</label>
-        <select id="postType">
-          <option value="free">Free Tip</option>
-          <option value="vip">VIP Tip</option>
-          <option value="result">Result / Update</option>
-          <option value="announcement">Announcement</option>
-        </select>
+  <!-- DASHBOARD -->
+  <div id="dashboard" style="display:none;">
 
-        <label style="margin-top:12px">Match (title)</label>
-        <input id="match" placeholder="Arsenal vs Brighton" />
-
-        <label style="margin-top:12px">Analysis (short)</label>
-        <textarea id="analysis" placeholder="Key points: Home form, injuries, xG..." ></textarea>
-
-        <label style="margin-top:12px">Tip / Correct Score</label>
-        <input id="tip" placeholder="Correct Score — 2-1 or Over 2.5" />
-
-        <div style="display:flex;gap:8px;margin-top:12px">
-          <div style="flex:1">
-            <label>Confidence</label>
-            <select id="confidence">
-              <option>Low</option>
-              <option selected>Medium</option>
-              <option>High</option>
-            </select>
-          </div>
-          <div style="width:140px">
-            <label>Kickoff (local/GMT)</label>
-            <input id="kickoff" type="text" placeholder="20:00 GMT" />
-          </div>
-        </div>
-
-        <label style="margin-top:12px">Extra Notes (optional)</label>
-        <input id="notes" placeholder="e.g. Stake: 1/10, Only for VIP" />
-
-        <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
-          <button id="previewBtn">Preview</button>
-          <button id="sendBtn">Send</button>
-          <button id="saveBtn" style="background:#334155">Save Locally</button>
-          <button id="clearBtn" class="danger">Clear Form</button>
-        </div>
-      </div>
-
-      <!-- History -->
-      <div class="card">
-        <label>Local History (saved in browser)</label>
-        <div id="historyList" style="margin-top:10px;max-height:260px;overflow:auto"></div>
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <button id="clearHistory" style="background:#334155">Clear History</button>
-          <button id="exportHistory" style="background:#0ea5a4">Export JSON</button>
-        </div>
-      </div>
+    <!-- VIP Tip Post -->
+    <div class="card">
+      <label>Post VIP Tip</label>
+      <textarea id="vipTip" placeholder="Compose your VIP tip here"></textarea>
+      <button id="sendVipBtn" style="margin-top:8px;">Send Tip</button>
+      <div class="small" style="margin-top:4px;">This will send the tip to all active VIP subscribers.</div>
     </div>
 
-    <!-- RIGHT: Preview + Response -->
-    <div>
-      <div class="card">
-        <label>Preview</label>
-        <div id="preview" class="preview">Fill the form and click Preview</div>
-      </div>
-
-      <div class="card">
-        <label>Last Server Response</label>
-        <pre id="serverResp" class="preview">No requests yet.</pre>
-      </div>
+    <!-- Subscribers List -->
+    <div class="card">
+      <label>Subscribers</label>
+      <table id="subscribersTable">
+        <thead>
+          <tr><th>Username</th><th>Type</th><th>Expiry</th><th>Status</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
+
+    <!-- Chat Logs -->
+    <div class="card">
+      <label>Chat Logs</label>
+      <table id="logsTable">
+        <thead>
+          <tr><th>Username</th><th>Type</th><th>Message</th><th>Time</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
   </div>
 </div>
 
 <script>
-const targetEl = document.getElementById('target');
-const postTypeEl = document.getElementById('postType');
-const matchEl = document.getElementById('match');
-const analysisEl = document.getElementById('analysis');
-const tipEl = document.getElementById('tip');
-const confidenceEl = document.getElementById('confidence');
-const kickoffEl = document.getElementById('kickoff');
-const notesEl = document.getElementById('notes');
-const previewEl = document.getElementById('preview');
-const serverRespEl = document.getElementById('serverResp');
-const historyList = document.getElementById('historyList');
+const ADMIN_PASSWORD = "YOUR_ADMIN_PASSWORD"; // replace with your password
 
-let history = JSON.parse(localStorage.getItem('tipHistory') || '[]');
-renderHistory();
+// LOGIN
+const loginBtn = document.getElementById('loginBtn');
+const adminPassword = document.getElementById('adminPassword');
+const loginCard = document.getElementById('loginCard');
+const dashboard = document.getElementById('dashboard');
 
-function buildPost(){
-  const postType = postTypeEl.value;
-  let lines = [];
-  if(postType==='announcement') lines.push('📢 ANNOUNCEMENT');
-  if(postType==='vip') lines.push('💎 VIP ANALYSIS');
-  if(postType==='free') lines.push('🆓 FREE TIP');
-  if(postType==='result') lines.push('✅ RESULT');
-
-  if(matchEl.value) lines.push('⚽ Match: '+matchEl.value);
-  if(analysisEl.value) lines.push('📊 Analysis: '+analysisEl.value);
-  
-  // Mask VIP tip for preview if not admin
-  if(postType==='vip') lines.push('🎯 Tip: 🔒 VIP locked - subscribers only');
-  else if(tipEl.value) lines.push('🎯 Tip: '+tipEl.value);
-
-  if(confidenceEl.value) lines.push('📈 Confidence: '+confidenceEl.value);
-  if(kickoffEl.value) lines.push('🕒 Kickoff: '+kickoffEl.value);
-  if(notesEl.value) lines.push('📝 Notes: '+notesEl.value);
-
-  lines.push('\n⚠️ Disclaimer: All tips are predictions based on analysis. No guarantees. Bet responsibly.');
-  return lines.join('\n');
-}
-
-document.getElementById('previewBtn').addEventListener('click', ()=>{
-  previewEl.textContent = buildPost();
+loginBtn.addEventListener('click', () => {
+  if(adminPassword.value === ADMIN_PASSWORD){
+    loginCard.style.display = 'none';
+    dashboard.style.display = 'block';
+    loadSubscribers();
+    loadLogs();
+  } else {
+    alert('Incorrect password');
+  }
 });
 
-document.getElementById('sendBtn').addEventListener('click', async ()=>{
-  const payload = {
-    target: targetEl.value,
-    text: buildPost(),
-    meta:{
-      postType: postTypeEl.value,
-      match: matchEl.value,
-      tip: tipEl.value,
-      confidence: confidenceEl.value,
-      kickoff: kickoffEl.value,
-      notes: notesEl.value
-    },
-    password: prompt("Enter admin password to send:")
-  };
+// LOAD Subscribers
+async function loadSubscribers(){
   try{
-    serverRespEl.textContent = 'Sending...';
-    const res = await fetch('/api/sendTip', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    });
+    const res = await fetch('/api/subscribers');
     const data = await res.json();
-    serverRespEl.textContent = JSON.stringify(data, null, 2);
-    if(res.ok){
-      history.unshift({ id: Date.now(), ...payload.meta, target: payload.target, text: payload.text });
-      localStorage.setItem('tipHistory', JSON.stringify(history));
-      renderHistory();
+    const tbody = document.querySelector('#subscribersTable tbody');
+    tbody.innerHTML = '';
+    data.forEach(sub => {
+      const tr = document.createElement('tr');
+      const status = sub.active ? 'Active' : 'Expired';
+      const expiryDate = new Date(sub.expiry).toLocaleString();
+      tr.innerHTML = `<td>${sub.username}</td><td>${sub.type}</td><td>${expiryDate}</td><td class="status-${sub.active ? 'active':'expired'}">${status}</td>`;
+      tbody.appendChild(tr);
+    });
+  }catch(e){ console.error(e); }
+}
+
+// LOAD Chat Logs
+async function loadLogs(){
+  try{
+    const res = await fetch('/api/chatlogs');
+    const data = await res.json();
+    const tbody = document.querySelector('#logsTable tbody');
+    tbody.innerHTML = '';
+    data.forEach(log => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${log.username}</td><td>${log.type}</td><td>${log.message}</td><td>${new Date(log.timestamp).toLocaleString()}</td>`;
+      tbody.appendChild(tr);
+    });
+  }catch(e){ console.error(e); }
+}
+
+// SEND VIP TIP to all active subscribers
+document.getElementById('sendVipBtn').addEventListener('click', async ()=>{
+  const tip = document.getElementById('vipTip').value.trim();
+  if(!tip) return alert('Write VIP tip first');
+
+  try{
+    const res = await fetch('/api/subscribers');
+    const subs = await res.json();
+    const activeSubs = subs.filter(s=>s.active);
+
+    for(const s of activeSubs){
+      await fetch('/api/sendTip', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ target:s.chatId, text:tip })
+      });
     }
-  }catch(err){
-    serverRespEl.textContent = 'Request failed: '+err.message;
-  }
-});
 
-function renderHistory(){
-  historyList.innerHTML = '';
-  if(history.length===0){ historyList.innerHTML = '<div class="small">No saved posts yet.</div>'; return;}
-  history.forEach(h=>{
-    const d = document.createElement('div'); d.className='history-item';
-    d.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
-      <div><strong>${h.match||h.postType}</strong><div class="small">${h.postType} • ${new Date(h.id).toLocaleString()}</div></div>
-      <div style="display:flex;gap:6px">
-        <button onclick='useHistory(${h.id})'>Load</button>
-      </div>
-    </div>
-    <div style="margin-top:8px" class="small">${h.text}</div>`;
-    historyList.appendChild(d);
-  });
-}
-
-window.useHistory = function(id){
-  const h = history.find(x=>x.id===id);
-  if(!h) return alert('Not found');
-  targetEl.value = h.target || '';
-  postTypeEl.value = h.postType || 'free';
-  matchEl.value = h.match || '';
-  analysisEl.value = h.analysis || '';
-  tipEl.value = h.tip || '';
-  confidenceEl.value = h.confidence || 'Medium';
-  kickoffEl.value = h.kickoff || '';
-  notesEl.value = h.notes || '';
-  previewEl.textContent = buildPost();
-}
-
-document.getElementById('clearBtn').addEventListener('click', ()=>{
-  if(confirm('Clear the form?')){
-    matchEl.value='';analysisEl.value='';tipEl.value='';confidenceEl.value='Medium';kickoffEl.value='';notesEl.value='';
-    previewEl.textContent='Fill the form and click Preview';
-  }
-});
-
-document.getElementById('clearHistory').addEventListener('click', ()=>{
-  if(confirm('Clear saved history?')){
-    history=[]; localStorage.removeItem('tipHistory'); renderHistory();
-  }
+    alert(`Sent to ${activeSubs.length} active subscribers`);
+    document.getElementById('vipTip').value = '';
+    loadLogs();
+  }catch(e){ console.error(e); alert('Error sending tips'); }
 });
 </script>
+
 </body>
 </html>
