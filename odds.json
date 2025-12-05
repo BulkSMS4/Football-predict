@@ -1,0 +1,22 @@
+{
+  "daily": [
+    { "odds": 2, "price": 50 },
+    { "odds": 5, "price": 120 },
+    { "odds": 10, "price": 250 }
+  ],
+  "weekly": [
+    { "odds": 10, "price": 350 },
+    { "odds": 20, "price": 700 },
+    { "odds": 50, "price": 1600 }
+  ],
+  "monthly": [
+    { "odds": 20, "price": 1500 },
+    { "odds": 50, "price": 3500 },
+    { "odds": 100, "price": 6500 }
+  ],
+  "yearly": [
+    { "odds": 100, "price": 7000 },
+    { "odds": 250, "price": 16000 },
+    { "odds": 500, "price": 30000 }
+  ]
+}
