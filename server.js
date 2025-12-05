@@ -5,185 +5,209 @@ const TelegramBot = require('node-telegram-bot-api');
 const app = express();
 app.use(express.json());
 
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = process.env.ADMIN_ID;
 
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+
 const SUB_FILE = './subscribers.json';
+const HISTORY_FILE = './history.json';
+const REF_FILE = './referrals.json';
 
-// ===== Helpers =====
-function loadSubs() {
-  if (!fs.existsSync(SUB_FILE)) return {};
-  return JSON.parse(fs.readFileSync(SUB_FILE));
-}
+// ---------- HELPERS ----------
+const load = f => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f)) : {};
+const save = (f,d)=>fs.writeFileSync(f,JSON.stringify(d,null,2));
+const isActive = s => s && s.paid && Date.now() < s.expiry;
 
-function saveSubs(data) {
-  fs.writeFileSync(SUB_FILE, JSON.stringify(data, null, 2));
-}
+// ---------- LOAD DATA ----------
+let subs = load(SUB_FILE);
+let hist = load(HISTORY_FILE);
+let ref = load(REF_FILE);
 
-function isActive(sub) {
-  return sub && Date.now() < sub.expiry;
-}
-
-// ===== Commands =====
-
-bot.onText(/\/help/, msg => {
-  bot.sendMessage(msg.chat.id,
-`📌 *MatchIQ Commands*
-
-/subscribe – Subscribe to VIP tips
-/status – Check subscription status
-/help – Show commands`,
-{ parse_mode: 'Markdown' });
+// ---------- COMMANDS ----------
+bot.onText(/\/help/, m=>{
+  bot.sendMessage(m.chat.id,
+`📌 *Commands*
+/free – Free tips
+/subscribe – VIP plans
+/status – Subscription status
+/help – Commands
+/refer <code> – Invite friends`,
+  {parse_mode:'Markdown'});
 });
 
-// ===== SUBSCRIBE =====
-bot.onText(/\/subscribe/, msg => {
-  bot.sendMessage(msg.chat.id,
-`💎 *Choose Subscription Plan*`,
-{
-  parse_mode: 'Markdown',
-  reply_markup: {
-    inline_keyboard: [
-      [{ text: 'Daily', callback_data: 'plan_daily' }],
-      [{ text: 'Weekly', callback_data: 'plan_weekly' }],
-      [{ text: 'Monthly', callback_data: 'plan_monthly' }],
-      [{ text: 'Yearly', callback_data: 'plan_yearly' }]
-    ]
-  }
-});
+bot.onText(/\/free/, m=>{
+  bot.sendMessage(m.chat.id,
+`🆓 *FREE TIPS*
+✅ Over 2.5 ✅
+✅ BTTS ✅
+💎 VIP gives more wins`,
+  {parse_mode:'Markdown'});
 });
 
-// ===== PLAN SELECT =====
-bot.on('callback_query', async q => {
-  const chatId = q.message.chat.id;
-  const subs = loadSubs();
-
-  if (q.data.startsWith('plan_')) {
-    subs[chatId] = { plan: q.data.replace('plan_', ''), paid: false };
-    saveSubs(subs);
-
-    return bot.sendMessage(chatId,
-`💳 *Payment Instructions*
-
-🇬🇭 *GHANA*
-Send Mobile Money to:
-📞 +2335622504
-👤 Richard Atidepe
-
-🌍 *INTERNATIONAL*
-WorldRemit or Ria
-➡ Country: Ghana
-➡ Name: Richard Atidepe
-➡ Payout: Mobile Money
-➡ Number: +2335622504
-
-✅ After payment click below`,
-{
-  parse_mode: 'Markdown',
-  reply_markup: { inline_keyboard: [[{ text: '✅ I Have Paid', callback_data: 'paid_confirm' }]] }
-});
-}
-
-  // ===== PAYMENT CONFIRM =====
-  if (q.data === 'paid_confirm') {
-    const user = q.from;
-    return bot.sendMessage(ADMIN_ID,
-`✅ *PAYMENT CONFIRMATION*
-
-👤 ${user.first_name}
-🆔 ${user.id}
-📦 Plan: ${subs[user.id]?.plan || 'Unknown'}
-
-Approve?`,
-{
-  parse_mode: 'Markdown',
-  reply_markup: {
-    inline_keyboard: [
-      [{ text: '✅ Approve', callback_data: `approve_${user.id}` }],
-      [{ text: '❌ Reject', callback_data: `reject_${user.id}` }]
-    ]
-  }
-});
-}
-
-  // ===== ADMIN APPROVE =====
-  if (q.data.startsWith('approve_')) {
-    const id = q.data.split('_')[1];
-    const sub = subs[id];
-    let days = { daily:1, weekly:7, monthly:30, yearly:365 }[sub.plan];
-
-    sub.paid = true;
-    sub.start = Date.now();
-    sub.expiry = Date.now() + days * 86400000;
-    saveSubs(subs);
-
-    bot.sendMessage(id,
-`✅ *Subscription Activated*
-
-📦 Plan: ${sub.plan}
-⏳ Expires: ${new Date(sub.expiry).toDateString()}`,
-{ parse_mode: 'Markdown' });
-
-    return bot.sendMessage(ADMIN_ID, '✅ Activated');
-  }
-
-  // ===== ADMIN REJECT =====
-  if (q.data.startsWith('reject_')) {
-    const id = q.data.split('_')[1];
-    delete subs[id];
-    saveSubs(subs);
-    bot.sendMessage(id, '❌ Payment not approved.');
-  }
+bot.onText(/\/status/, m=>{
+  const s=subs[m.chat.id];
+  if(!isActive(s)) return bot.sendMessage(m.chat.id,'❌ No active VIP');
+  bot.sendMessage(m.chat.id,
+`✅ ACTIVE VIP
+⏳ Expires: ${new Date(s.expiry).toDateString()}`);
 });
 
-// ===== STATUS =====
-bot.onText(/\/status/, msg => {
-  const subs = loadSubs();
-  const sub = subs[msg.chat.id];
-
-  if (!sub) return bot.sendMessage(msg.chat.id, '❌ No active subscription.');
-
-  if (!isActive(sub)) {
-    return bot.sendMessage(msg.chat.id, '⛔ Subscription expired. Use /subscribe.');
-  }
-
-  bot.sendMessage(msg.chat.id,
-`✅ *ACTIVE SUBSCRIPTION*
-📦 Plan: ${sub.plan}
-⏳ Expires: ${new Date(sub.expiry).toDateString()}`,
-{ parse_mode: 'Markdown' });
+bot.onText(/\/refer (.+)/, (m,match)=>{
+  const code = match[1];
+  if(!ref[code]) ref[code]={count:0};
+  ref[code].count++;
+  save(REF_FILE,ref);
+  bot.sendMessage(m.chat.id,`✅ Referral counted! You invited ${ref[code].count} friends`);
 });
 
-// ===== ADMIN LIST =====
-bot.onText(/\/admin/, msg => {
-  if (String(msg.chat.id) !== ADMIN_ID) return;
-
-  const subs = loadSubs();
-  let text = '👥 *Subscribers*\n\n';
-
-  Object.entries(subs).forEach(([id,s])=>{
-    if (s.paid) {
-      text += `🆔 ${id}\n📦 ${s.plan}\n⏳ ${new Date(s.expiry).toDateString()}\n\n`;
+// ---------- SUBSCRIBE ----------
+bot.onText(/\/subscribe/, m=>{
+  bot.sendMessage(m.chat.id,'💎 VIP Subscription',{
+    parse_mode:'Markdown',
+    reply_markup:{
+      inline_keyboard:[
+        [{text:'📜 View History',callback_data:'history'}],
+        [{text:'✅ Subscribe',callback_data:'plans'}]
+      ]
     }
   });
-
-  bot.sendMessage(ADMIN_ID, text || 'No subscribers', { parse_mode: 'Markdown' });
 });
 
-// ===== VIP MESSAGE GATE =====
-bot.on('message', msg => {
-  if (!msg.text) return;
-  if (!msg.text.startsWith('VIP:')) return;
+// ---------- CALLBACK ----------
+bot.on('callback_query', q=>{
+  const id=q.message.chat.id;
 
-  const subs = loadSubs();
-  const sub = subs[msg.chat.id];
+  // ---------------- VIEW HISTORY ----------------
+  if(q.data==='history'){
+    let msg='📊 *Past Performance*\n\n';
+    Object.values(hist).slice(-5).forEach(h=>{
+      msg+=`✅ ${h.match} — WIN ✅\n`;
+    });
+    return bot.sendMessage(id,msg||'No history',{parse_mode:'Markdown'});
+  }
 
-  if (!sub || !isActive(sub)) {
-    return bot.sendMessage(msg.chat.id,
-'🔒 VIP content blocked.\nUse /subscribe to access.');
+  // ---------------- SUBSCRIBE PLANS ----------------
+  if(q.data==='plans'){
+    return bot.sendMessage(id,'Choose Plan',{
+      reply_markup:{
+        inline_keyboard:[
+          [{text:'Daily',callback_data:'p_daily'}],
+          [{text:'Weekly',callback_data:'p_weekly'}],
+          [{text:'Monthly',callback_data:'p_monthly'}],
+          [{text:'Yearly',callback_data:'p_yearly'}]
+        ]
+      }
+    });
+  }
+
+  // ---------------- SELECT PLAN ----------------
+  if(q.data.startsWith('p_')){
+    subs[id]={ plan:q.data.split('_')[1], paid:false };
+    save(SUB_FILE,subs);
+    return bot.sendMessage(id,
+`💳 Payment Instructions:
+
+🇬🇭 Ghana MoMo: 05622504
+👤 Richard Atidepe
+
+🌍 WorldRemit/Ria → Ghana
+
+✅ Click after paying`,
+{
+      reply_markup:{inline_keyboard:[[{text:'I Paid ✅',callback_data:'paid'}]]}
+    });
+  }
+
+  // ---------------- USER PAID ----------------
+  if(q.data==='paid'){
+    bot.sendMessage(ADMIN_ID,
+`✅ Payment Alert
+User: ${id}
+Plan: ${subs[id].plan}`,
+{
+      reply_markup:{
+        inline_keyboard:[
+          [{text:'Approve',callback_data:`ok_${id}`}],
+          [{text:'Reject',callback_data:`no_${id}`}],
+          [{text:'Revoke',callback_data:`revoke_${id}`}]
+        ]
+      }
+    });
+  }
+
+  // ---------------- ADMIN APPROVE ----------------
+  if(q.data.startsWith('ok_')){
+    const uid=q.data.split('_')[1];
+    const d={daily:1,weekly:7,monthly:30,yearly:365}[subs[uid].plan];
+    subs[uid].paid=true;
+    subs[uid].expiry=Date.now()+d*86400000;
+    subs[uid].warned=false;
+    subs[uid].expired=false;
+    save(SUB_FILE,subs);
+    bot.sendMessage(uid,'✅ VIP Activated');
+  }
+
+  // ---------------- ADMIN REJECT ----------------
+  if(q.data.startsWith('no_')){
+    const uid=q.data.split('_')[1];
+    delete subs[uid];
+    save(SUB_FILE,subs);
+  }
+
+  // ---------------- ADMIN REVOKE ----------------
+  if(q.data.startsWith('revoke_')){
+    const uid=q.data.split('_')[1];
+    delete subs[uid];
+    save(SUB_FILE,subs);
+    bot.sendMessage(uid,'⛔ VIP revoked by admin');
   }
 });
 
-// ===== SERVER =====
-app.get('/', (req,res)=>res.send('✅ MatchIQ Bot Running'));
-app.listen(10000);
+// ---------- ADMIN VIP POST ----------
+bot.onText(/\/vip (.+)/, (m,match)=>{
+  if(String(m.chat.id)!==ADMIN_ID) return;
+  const text=`💎 VIP TIP\n${match[1]}`;
+
+  hist[Date.now()]={match:match[1]};
+  save(HISTORY_FILE,hist);
+
+  Object.keys(subs).forEach(uid=>{
+    if(isActive(subs[uid])){
+      bot.sendMessage(uid,`🔥 NEW VIP GAME POSTED\n\n${text}`);
+    }
+  });
+});
+
+// ---------- ADMIN BROADCAST ----------
+bot.onText(/\/broadcast (.+)/, (m,match)=>{
+  if(String(m.chat.id)!==ADMIN_ID) return;
+  Object.keys(subs).forEach(uid=>{
+    bot.sendMessage(uid,`📢 BROADCAST:\n\n${match[1]}`);
+  });
+});
+
+// ---------- EXPIRY CHECK & ALERTS ----------
+setInterval(()=>{
+  Object.keys(subs).forEach(id=>{
+    const s=subs[id];
+    if(!s.paid) return;
+
+    const left = s.expiry-Date.now();
+
+    if(left<86400000 && left>0 && !s.warned){
+      s.warned=true;
+      bot.sendMessage(id,'⏰ VIP expires in 24 hours');
+    }
+
+    if(left<=0 && !s.expired){
+      s.expired=true;
+      bot.sendMessage(id,'⛔ VIP expired. Renew to continue');
+    }
+  });
+  save(SUB_FILE,subs);
+}, 60000);
+
+// ---------- SERVER ----------
+app.get('/',(_,res)=>res.send('✅ MatchIQ Running'));
+app.listen(10000,()=>console.log('Server running'));
