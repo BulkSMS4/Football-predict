@@ -1,75 +1,50 @@
-import express from "express";
-import fetch from "node-fetch";
+const express = require('express');
+const bodyParser = require('body-parser');
+const path = require('path');
 
 const app = express();
+const port = process.env.PORT || 10000;
 
-// Middleware
-app.use(express.json());
+// Parse JSON bodies
+app.use(bodyParser.json());
 
-// ✅ Home route (fixes Cannot GET /)
-app.get("/", (req, res) => {
-  res.send("✅ Football Predict Bot API is running");
+// Serve all static files from the 'public' folder
+app.use(express.static(path.join(__dirname, 'public')));
+
+// --- Example API routes ---
+
+// Health check
+app.get('/api', (req, res) => {
+  res.json({ status: 'Football Predict Bot API is running ✅' });
 });
 
-// ✅ Telegram Send Tip API
-app.post("/api/sendTip", async (req, res) => {
-  try {
-    const { target, text } = req.body;
+// Example POST predict endpoint
+app.post('/api/predict', (req, res) => {
+  const { match, date } = req.body;
 
-    if (!target || !text) {
-      return res.status(400).json({
-        error: "target and text required"
-      });
-    }
-
-    const BOT_TOKEN = process.env.BOT_TOKEN;
-
-    if (!BOT_TOKEN) {
-      return res.status(500).json({
-        error: "BOT_TOKEN not set"
-      });
-    }
-
-    const telegramURL = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-
-    const tgResponse = await fetch(telegramURL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        chat_id: target,
-        text,
-        parse_mode: "HTML",
-        disable_web_page_preview: true
-      })
-    });
-
-    const data = await tgResponse.json();
-
-    if (!data.ok) {
-      return res.status(500).json({
-        error: "Telegram API Error",
-        telegram: data
-      });
-    }
-
-    res.json({
-      success: true,
-      telegram: data
-    });
-
-  } catch (err) {
-    console.error("SERVER ERROR:", err);
-    res.status(500).json({
-      error: err.message
-    });
+  if (!match || !date) {
+    return res.status(400).json({ error: 'Missing match or date in request body' });
   }
+
+  // Example prediction logic (replace with your real logic)
+  const prediction = {
+    match,
+    date,
+    winner: 'TeamA', 
+    score: '2-1',
+  };
+
+  res.json(prediction);
 });
 
-// ✅ Render port
-const PORT = process.env.PORT || 3000;
+// --- Serve admin dashboard ---
+// Access it via: /telegram_admin.html
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'telegram_admin.html'));
+});
 
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+// Start the server
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+  console.log(`Admin dashboard: http://localhost:${port}/telegram_admin.html`);
 });
