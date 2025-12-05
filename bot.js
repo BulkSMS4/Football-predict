@@ -1,9 +1,12 @@
+// bot.js
 const TelegramBot = require('node-telegram-bot-api');
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
 if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN not set');
+if (!process.env.ADMIN_PASSWORD) throw new Error('ADMIN_PASSWORD not set');
 
-// --- /admin command sends dashboard link ---
+const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+
+// --- /admin command: dashboard link ---
 bot.onText(/\/admin/, (msg) => {
   const chatId = msg.chat.id;
   const url = `https://football-predict-k7yp.onrender.com/admin?password=${process.env.ADMIN_PASSWORD}`;
@@ -29,34 +32,34 @@ bot.onText(/\/tips/, (msg) => {
   });
 });
 
-// --- Handle button clicks ---
+// --- Handle inline button clicks ---
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data;
 
-  // Ask for target channel/chat
-  await bot.sendMessage(chatId, 'Enter the target channel or chat ID (e.g. @channelname or -1001234567890):');
+  await bot.sendMessage(chatId, 'Enter the target channel or chat ID (e.g., @channelname or -1001234567890):');
 
-  // Listen for next message as target
   const targetListener = (msg) => {
-    if (msg.chat.id !== chatId) return; // ignore other users
+    if (msg.chat.id !== chatId) return;
 
     const target = msg.text;
 
-    // Build example tip
+    // Default tip content
     let text = '';
     if (data === 'tip_free') text = '🆓 FREE TIP\n⚽ Match: TeamA vs TeamB\n🎯 Tip: Over 2.5 Goals';
     if (data === 'tip_vip') text = '💎 VIP TIP\n⚽ Match: TeamC vs TeamD\n🎯 Tip: Correct Score — 2-1\n📝 Notes: Small stake recommended';
     if (data === 'tip_result') text = '✅ RESULT\n⚽ Match: TeamE vs TeamF\n🎯 Result: 1–1 (Over 1.5)';
 
-    // Send tip to target
+    // Send tip
     bot.sendMessage(target, text)
       .then(() => bot.sendMessage(chatId, '✅ Tip sent successfully!'))
       .catch(err => bot.sendMessage(chatId, '❌ Failed to send tip: ' + err.message));
 
-    // Remove listener after first use
+    // Remove listener to avoid duplicate triggers
     bot.removeListener('message', targetListener);
   };
 
   bot.on('message', targetListener);
 });
+
+module.exports = bot;
