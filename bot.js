@@ -4,8 +4,8 @@ const fs = require('fs');
 const path = require('path');
 
 // === CONFIG ===
-const BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN';
-const ADMIN_ID = 'YOUR_TELEGRAM_ID'; // where to send payment screenshots
+const BOT_TOKEN = '8596462347:AAF8B11EYoPKaaVFQgzC2dvIDcAKkPc4ybQ';
+const ADMIN_ID = '6482794683'; // where to send payment screenshots
 const SUB_FILE = './subscribers.json';
 const ODDS_FILE = './odds.json';
 const PENDING_FILE = './pendingPayments.json';
