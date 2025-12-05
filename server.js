@@ -10,7 +10,7 @@ app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public'))); // serve html/js/css
 
 // === CONFIG ===
-const BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN';
+const BOT_TOKEN = '8596462347:AAF8B11EYoPKaaVFQgzC2dvIDcAKkPc4ybQ';
 const SUB_FILE = './subscribers.json';
 const ODDS_FILE = './odds.json';
 
