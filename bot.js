@@ -1,82 +1,59 @@
+require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
-
-if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN not set');
-if (!process.env.ADMIN_PASSWORD) throw new Error('ADMIN_PASSWORD not set');
+const fs = require('fs');
 
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+const dbFile = './subscribers.json';
 
-// --- /admin command ---
-bot.onText(/\/admin/, (msg) => {
+// Load subscribers
+let subscribers = {};
+if (fs.existsSync(dbFile)) subscribers = JSON.parse(fs.readFileSync(dbFile));
+
+function saveSubscribers() {
+  fs.writeFileSync(dbFile, JSON.stringify(subscribers, null, 2));
+}
+
+// /subscribe command
+bot.onText(/\/subscribe/, (msg) => {
   const chatId = msg.chat.id;
-  const url = `https://football-predict-k7yp.onrender.com/admin?password=${process.env.ADMIN_PASSWORD}`;
-  bot.sendMessage(chatId, `🔑 Open admin dashboard: [Click Here](${url})`, { parse_mode: 'Markdown' });
+  bot.sendMessage(chatId,
+    `Choose your subscription:\n\n` +
+    `1️⃣ Daily VIP - $1\n` +
+    `2️⃣ Weekly VIP - $5\n` +
+    `3️⃣ Monthly VIP - $15\n` +
+    `4️⃣ Yearly VIP - $150\n\nReply with the number to pay and activate.`
+  );
 });
 
-// --- /status ---
-bot.onText(/\/status/, (msg) => {
-  bot.sendMessage(msg.chat.id, '✅ Football Predict Bot API is running.');
-});
-
-// --- /tips inline buttons ---
-bot.onText(/\/tips/, (msg) => {
+// Capture user choice
+bot.on('message', (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, 'Select a tip type to send:', {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: 'Free Tip', callback_data: 'tip_free' }],
-        [{ text: 'VIP Tip', callback_data: 'tip_vip' }],
-        [{ text: 'Result', callback_data: 'tip_result' }]
-      ]
-    }
-  });
+  const text = msg.text.trim();
+
+  if (['1','2','3','4'].includes(text)) {
+    let durationDays = 1;
+    let amount = 1;
+    if (text==='2'){durationDays=7; amount=5;}
+    if (text==='3'){durationDays=30; amount=15;}
+    if (text==='4'){durationDays=365; amount=150;}
+
+    // Here you should integrate payment API
+    bot.sendMessage(chatId, `💳 Please pay $${amount} to activate VIP.`);
+
+    // Simulate payment success
+    setTimeout(()=>{
+      const expires = new Date(Date.now() + durationDays*24*60*60*1000);
+      subscribers[chatId] = { subscription: { plan: text, expires: expires, alertSent:false } };
+      saveSubscribers();
+      bot.sendMessage(chatId, `✅ VIP activated! Expires: ${expires.toDateString()}`);
+    }, 3000); // simulate 3s payment processing
+  }
 });
 
-// --- Handle button clicks + optional image ---
-bot.on('callback_query', async (query) => {
-  const chatId = query.message.chat.id;
-  const data = query.data;
-
-  await bot.sendMessage(chatId, 'Enter target channel/group ID (e.g., @channelusername or -1001234567890):');
-
-  const targetListener = (msg) => {
-    if (msg.chat.id !== chatId) return;
-
-    const target = msg.text;
-
-    // Ask if user wants to send an image
-    bot.sendMessage(chatId, 'Do you want to attach an image? Send the image now or type "no":');
-
-    const imageListener = (imgMsg) => {
-      if (imgMsg.chat.id !== chatId) return;
-
-      let text = '';
-      if (data === 'tip_free') text = '🆓 FREE TIP\n⚽ Match: TeamA vs TeamB\n🎯 Tip: Over 2.5 Goals';
-      if (data === 'tip_vip') text = '💎 VIP TIP\n⚽ Match: TeamC vs TeamD\n🎯 Tip: Correct Score — 2-1\n📝 Notes: Small stake recommended';
-      if (data === 'tip_result') text = '✅ RESULT\n⚽ Match: TeamE vs TeamF\n🎯 Result: 1–1 (Over 1.5)';
-
-      if (imgMsg.photo && imgMsg.photo.length > 0) {
-        // Get highest resolution
-        const fileId = imgMsg.photo[imgMsg.photo.length - 1].file_id;
-        bot.sendPhoto(target, fileId, { caption: text })
-          .then(() => bot.sendMessage(chatId, '✅ Tip + image sent successfully!'))
-          .catch(err => bot.sendMessage(chatId, '❌ Failed: ' + err.message));
-      } else if (imgMsg.text && imgMsg.text.toLowerCase() === 'no') {
-        bot.sendMessage(target, text)
-          .then(() => bot.sendMessage(chatId, '✅ Tip sent successfully!'))
-          .catch(err => bot.sendMessage(chatId, '❌ Failed: ' + err.message));
-      } else {
-        return; // Wait for proper input
-      }
-
-      // Remove listeners
-      bot.removeListener('message', imageListener);
-      bot.removeListener('message', targetListener);
-    };
-
-    bot.on('message', imageListener);
-  };
-
-  bot.on('message', targetListener);
+// Mask VIP tips for non-subscribers
+bot.onText(/\/tip/, (msg) => {
+  const chatId = msg.chat.id;
+  if (!subscribers[chatId] || !isActive(chatId)) {
+    bot.sendMessage(chatId, `💎 VIP tip: Subscribe to access VIP tips! Use /subscribe`);
+  }
 });
-
-module.exports = bot;
