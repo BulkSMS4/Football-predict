@@ -1,44 +1,35 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Admin Login</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin Login — MatchIQ</title>
 <style>
-  body { display:flex; align-items:center; justify-content:center; height:100vh; font-family:Arial, sans-serif; background:#0f1724; color:#fff; margin:0; }
-  .login-box { background:#0b1220; padding:30px; border-radius:12px; text-align:center; width:320px; box-shadow:0 6px 18px rgba(0,0,0,0.5);}
-  input { width:100%; padding:10px; margin:12px 0; border-radius:8px; border:none; font-size:14px; }
-  button { width:100%; padding:10px; border:none; border-radius:8px; background:#06b6d4; color:#022; font-weight:600; cursor:pointer; font-size:14px; }
-  img.logo { width:80px; height:80px; margin-bottom:15px; border-radius:12px; }
-  h2 { margin:8px 0 12px 0; font-size:22px; }
-  p#error { color:#ef4444; font-size:14px; margin-top:8px; }
+  body{font-family:sans-serif;background:#071b2b;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+  .login-card{background:#0b1220;padding:32px;border-radius:12px;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+  input{width:100%;padding:10px;margin:10px 0;border-radius:8px;border:1px solid #06b6d4;background:transparent;color:#fff}
+  button{background:#06b6d4;color:#022;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:600}
+  img{width:64px;height:64px;margin-bottom:12px}
 </style>
 </head>
 <body>
-  <div class="login-box">
-    <!-- Admin Logo -->
-    <img class="https://postimg.cc/fSvSkWvx" alt="Admin Logo" />
-    <h2>Admin Login</h2>
-    <input type="password" id="password" placeholder="Enter password" />
-    <button onclick="checkPassword()">Login</button>
-    <p id="error"></p>
+  <div class="login-card">
+    <img src="logo.png" alt="Admin Logo" />
+    <h2>Telegram Tips Admin</h2>
+    <input id="password" type="password" placeholder="Enter admin password" />
+    <button onclick="login()">Login</button>
+    <div id="msg" style="color:#f00;margin-top:8px"></div>
   </div>
 
   <script>
-    function checkPassword() {
-      const password = document.getElementById('password').value;
-      const adminPassword = '{{ADMIN_PASSWORD}}'; // Replaced by server
-      if (password === adminPassword) {
-        window.location.href = '/dashboard';
-      } else {
-        document.getElementById('error').textContent = 'Incorrect password!';
-      }
-    }
+    function login(){
+      const pass = document.getElementById('password').value;
+      if(!pass) return document.getElementById('msg').textContent='Enter password';
 
-    // Optional: Enter key triggers login
-    document.getElementById('password').addEventListener('keyup', function(e){
-      if(e.key === 'Enter') checkPassword();
-    });
+      // Simple client-side redirect to admin.html with password hidden
+      localStorage.setItem('admin_pass', pass);
+      window.location.href = 'admin.html';
+    }
   </script>
 </body>
 </html>
