@@ -1,168 +1,189 @@
-require('dotenv').config();
-const TelegramBot = require('node-telegram-bot-api');
+const express = require('express');
 const fs = require('fs');
+const TelegramBot = require('node-telegram-bot-api');
+
+const app = express();
+app.use(express.json());
 
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+const ADMIN_ID = process.env.ADMIN_ID;
 
-const ADMIN_IDS = [6482794683]; // ✅ YOUR TELEGRAM ID
-const VIP_CHANNEL_ID = '-100XXXXXXXXXX'; // ✅ Your private channel ID
+const SUB_FILE = './subscribers.json';
 
-const DB_FILE = './subscribe.json';
-
-/* ---------- DATABASE ---------- */
-function loadDB() {
-  if (!fs.existsSync(DB_FILE)) {
-    fs.writeFileSync(DB_FILE, JSON.stringify({ users: {} }, null, 2));
-  }
-  return JSON.parse(fs.readFileSync(DB_FILE));
+// ===== Helpers =====
+function loadSubs() {
+  if (!fs.existsSync(SUB_FILE)) return {};
+  return JSON.parse(fs.readFileSync(SUB_FILE));
 }
 
-function saveDB(db) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+function saveSubs(data) {
+  fs.writeFileSync(SUB_FILE, JSON.stringify(data, null, 2));
 }
 
-/* ---------- SUBSCRIPTION TIME ---------- */
-const PLANS = {
-  daily: 1,
-  weekly: 7,
-  monthly: 30,
-  yearly: 365
-};
-
-function addDays(days) {
-  return Date.now() + days * 24 * 60 * 60 * 1000;
+function isActive(sub) {
+  return sub && Date.now() < sub.expiry;
 }
 
-/* ---------- USER COMMANDS ---------- */
+// ===== Commands =====
 
-/>> HELP
 bot.onText(/\/help/, msg => {
   bot.sendMessage(msg.chat.id,
 `📌 *MatchIQ Commands*
 
 /subscribe – Subscribe to VIP tips
-/status – Check your subscription
-/help – Show commands`, { parse_mode: 'Markdown' });
-});
-
-/>> SUBSCRIBE
-bot.onText(/\/subscribe/, msg => {
-  bot.sendMessage(msg.chat.id, 'Choose a plan 👇', {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: '✅ Daily', callback_data: 'sub_daily' }],
-        [{ text: '✅ Weekly', callback_data: 'sub_weekly' }],
-        [{ text: '✅ Monthly', callback_data: 'sub_monthly' }],
-        [{ text: '✅ Yearly', callback_data: 'sub_yearly' }]
-      ]
-    }
-  });
-});
-
-/>> STATUS
-bot.onText(/\/status/, msg => {
-  const db = loadDB();
-  const user = db.users[msg.from.id];
-
-  if (!user || user.expiry < Date.now()) {
-    return bot.sendMessage(msg.chat.id, '❌ You have no active subscription.');
-  }
-
-  const daysLeft = Math.ceil((user.expiry - Date.now()) / 86400000);
-  bot.sendMessage(msg.chat.id, `✅ Active VIP
-⏳ Days left: ${daysLeft}`);
-});
-
-/* ---------- CALLBACK HANDLER ---------- */
-
-bot.on('callback_query', q => {
-  if (!q.data.startsWith('sub_')) return;
-
-  const plan = q.data.split('_')[1];
-  const db = loadDB();
-
-  db.users[q.from.id] = {
-    username: q.from.username || '',
-    expiry: addDays(PLANS[plan])
-  };
-
-  saveDB(db);
-
-  bot.sendMessage(q.from.id,
-`✅ Subscription successful
-Plan: *${plan.toUpperCase()}*
-Access granted to VIP tips ✅`, { parse_mode: 'Markdown' });
-
-  bot.answerCallbackQuery(q.id);
-});
-
-/* ---------- ADMIN ---------- */
-
-bot.onText(/\/admin/, msg => {
-  if (!ADMIN_IDS.includes(msg.from.id)) {
-    return bot.sendMessage(msg.chat.id, '❌ Access denied');
-  }
-
-  bot.sendMessage(msg.chat.id,
-`🛠 *Admin Panel*
-
-/postvip – Post VIP tip
-/postfree – Post free tip
-/subscribers – View subscribers
-/broadcast – Send alert`,
+/status – Check subscription status
+/help – Show commands`,
 { parse_mode: 'Markdown' });
 });
 
-/>> POST VIP
-bot.onText(/\/postvip (.+)/, (msg, match) => {
-  if (!ADMIN_IDS.includes(msg.from.id)) return;
+// ===== SUBSCRIBE =====
+bot.onText(/\/subscribe/, msg => {
+  bot.sendMessage(msg.chat.id,
+`💎 *Choose Subscription Plan*`,
+{
+  parse_mode: 'Markdown',
+  reply_markup: {
+    inline_keyboard: [
+      [{ text: 'Daily', callback_data: 'plan_daily' }],
+      [{ text: 'Weekly', callback_data: 'plan_weekly' }],
+      [{ text: 'Monthly', callback_data: 'plan_monthly' }],
+      [{ text: 'Yearly', callback_data: 'plan_yearly' }]
+    ]
+  }
+});
+});
 
-  const tip = match[1];
-  const db = loadDB();
+// ===== PLAN SELECT =====
+bot.on('callback_query', async q => {
+  const chatId = q.message.chat.id;
+  const subs = loadSubs();
 
-  for (const uid in db.users) {
-    if (db.users[uid].expiry > Date.now()) {
-      bot.sendMessage(uid, `🔥 *VIP TIP*\n${tip}`, { parse_mode: 'Markdown' });
-    }
+  if (q.data.startsWith('plan_')) {
+    subs[chatId] = { plan: q.data.replace('plan_', ''), paid: false };
+    saveSubs(subs);
+
+    return bot.sendMessage(chatId,
+`💳 *Payment Instructions*
+
+🇬🇭 *GHANA*
+Send Mobile Money to:
+📞 +2335622504
+👤 Richard Atidepe
+
+🌍 *INTERNATIONAL*
+WorldRemit or Ria
+➡ Country: Ghana
+➡ Name: Richard Atidepe
+➡ Payout: Mobile Money
+➡ Number: +2335622504
+
+✅ After payment click below`,
+{
+  parse_mode: 'Markdown',
+  reply_markup: { inline_keyboard: [[{ text: '✅ I Have Paid', callback_data: 'paid_confirm' }]] }
+});
+}
+
+  // ===== PAYMENT CONFIRM =====
+  if (q.data === 'paid_confirm') {
+    const user = q.from;
+    return bot.sendMessage(ADMIN_ID,
+`✅ *PAYMENT CONFIRMATION*
+
+👤 ${user.first_name}
+🆔 ${user.id}
+📦 Plan: ${subs[user.id]?.plan || 'Unknown'}
+
+Approve?`,
+{
+  parse_mode: 'Markdown',
+  reply_markup: {
+    inline_keyboard: [
+      [{ text: '✅ Approve', callback_data: `approve_${user.id}` }],
+      [{ text: '❌ Reject', callback_data: `reject_${user.id}` }]
+    ]
+  }
+});
+}
+
+  // ===== ADMIN APPROVE =====
+  if (q.data.startsWith('approve_')) {
+    const id = q.data.split('_')[1];
+    const sub = subs[id];
+    let days = { daily:1, weekly:7, monthly:30, yearly:365 }[sub.plan];
+
+    sub.paid = true;
+    sub.start = Date.now();
+    sub.expiry = Date.now() + days * 86400000;
+    saveSubs(subs);
+
+    bot.sendMessage(id,
+`✅ *Subscription Activated*
+
+📦 Plan: ${sub.plan}
+⏳ Expires: ${new Date(sub.expiry).toDateString()}`,
+{ parse_mode: 'Markdown' });
+
+    return bot.sendMessage(ADMIN_ID, '✅ Activated');
   }
 
-  bot.sendMessage(msg.chat.id, '✅ VIP tip sent');
+  // ===== ADMIN REJECT =====
+  if (q.data.startsWith('reject_')) {
+    const id = q.data.split('_')[1];
+    delete subs[id];
+    saveSubs(subs);
+    bot.sendMessage(id, '❌ Payment not approved.');
+  }
 });
 
-/>> POST FREE
-bot.onText(/\/postfree (.+)/, (msg, match) => {
-  if (!ADMIN_IDS.includes(msg.from.id)) return;
+// ===== STATUS =====
+bot.onText(/\/status/, msg => {
+  const subs = loadSubs();
+  const sub = subs[msg.chat.id];
 
-  bot.sendMessage(VIP_CHANNEL_ID,
-`⚽ *FREE TIP*\n${match[1]}`, { parse_mode: 'Markdown' });
+  if (!sub) return bot.sendMessage(msg.chat.id, '❌ No active subscription.');
+
+  if (!isActive(sub)) {
+    return bot.sendMessage(msg.chat.id, '⛔ Subscription expired. Use /subscribe.');
+  }
+
+  bot.sendMessage(msg.chat.id,
+`✅ *ACTIVE SUBSCRIPTION*
+📦 Plan: ${sub.plan}
+⏳ Expires: ${new Date(sub.expiry).toDateString()}`,
+{ parse_mode: 'Markdown' });
 });
 
-/>> SUBSCRIBERS LIST
-bot.onText(/\/subscribers/, msg => {
-  if (!ADMIN_IDS.includes(msg.from.id)) return;
+// ===== ADMIN LIST =====
+bot.onText(/\/admin/, msg => {
+  if (String(msg.chat.id) !== ADMIN_ID) return;
 
-  const db = loadDB();
+  const subs = loadSubs();
   let text = '👥 *Subscribers*\n\n';
 
-  for (const id in db.users) {
-    const days = Math.ceil((db.users[id].expiry - Date.now()) / 86400000);
-    text += `• ${id} — ${days} days\n`;
-  }
+  Object.entries(subs).forEach(([id,s])=>{
+    if (s.paid) {
+      text += `🆔 ${id}\n📦 ${s.plan}\n⏳ ${new Date(s.expiry).toDateString()}\n\n`;
+    }
+  });
 
-  bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
+  bot.sendMessage(ADMIN_ID, text || 'No subscribers', { parse_mode: 'Markdown' });
 });
 
-/* ---------- AUTO EXPIRY CHECK ---------- */
+// ===== VIP MESSAGE GATE =====
+bot.on('message', msg => {
+  if (!msg.text) return;
+  if (!msg.text.startsWith('VIP:')) return;
 
-setInterval(() => {
-  const db = loadDB();
+  const subs = loadSubs();
+  const sub = subs[msg.chat.id];
 
-  for (const id in db.users) {
-    if (db.users[id].expiry < Date.now()) {
-      bot.sendMessage(id, '⚠️ Your VIP subscription has expired.');
-      delete db.users[id];
-    }
+  if (!sub || !isActive(sub)) {
+    return bot.sendMessage(msg.chat.id,
+'🔒 VIP content blocked.\nUse /subscribe to access.');
   }
+});
 
-  saveDB(db);
-}, 3600000); // every hour
+// ===== SERVER =====
+app.get('/', (req,res)=>res.send('✅ MatchIQ Bot Running'));
+app.listen(10000);
