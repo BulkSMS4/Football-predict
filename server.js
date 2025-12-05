@@ -1,296 +1,200 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Telegram Tips Admin — MatchIQ</title>
-<style>
-:root {
-  --bg:#0f1724; --card:#0b1220; --muted:#94a3b8;
-  --accent:#06b6d4; --good:#10b981; --danger:#ef4444;
-}
-body {
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial;
-  background: linear-gradient(180deg,#071029 0%, #071b2b 100%);
-  color: #e6eef6; margin:0; padding:24px;
-}
-.container { max-width:980px; margin:0 auto; }
-header { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
-header img { width:44px; height:44px; border-radius:8px; background:linear-gradient(135deg,#06b6d4,#0ea5a4); }
-header h1 { font-size:20px; margin:0; }
-.card { background: rgba(255,255,255,0.03); padding:16px; border-radius:12px; margin-bottom:12px; box-shadow:0 6px 18px rgba(2,6,23,0.6); }
-label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
-input[type="text"], textarea, select { width:100%; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.06); background:transparent; color:inherit; font-size:14px; box-sizing:border-box; }
-textarea { min-height:90px; resize:vertical; }
-.grid { display:grid; grid-template-columns:1fr 350px; gap:12px; }
-.row { display:flex; gap:8px; flex-wrap:wrap; }
-button { background:var(--accent); color:#022; border:none; padding:10px 12px; border-radius:8px; cursor:pointer; font-weight:600; }
-.muted { color:var(--muted); font-size:13px; }
-.preview { white-space:pre-wrap; background:rgba(0,0,0,0.25); padding:12px; border-radius:8px; border:1px dashed rgba(255,255,255,0.04); }
-.history-item { padding:8px; border-radius:8px; background:rgba(255,255,255,0.02); margin-bottom:8px; font-size:13px; }
-.small { font-size:13px; color:var(--muted); }
-.danger { background:var(--danger); color:#fff; }
-.success { background:var(--good); color:#022; }
-.sub-list { max-height:250px; overflow:auto; }
-.sub-item { padding:6px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; justify-content:space-between; align-items:center; }
-.sub-item span { font-size:13px; }
-</style>
-</head>
-<body>
-<div class="container">
-<header>
-  <img src="https://i.imgur.com/5Qf8h3p.png" alt="Admin Logo" />
-  <div>
-    <h1>Telegram Tips Admin — MatchIQ</h1>
-    <div class="small">Manage subscribers, approve payments, and post VIP/free tips</div>
-  </div>
-</header>
+// server.js
+require('dotenv').config();
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const bodyParser = require('body-parser');
+const TelegramBot = require('node-telegram-bot-api');
 
-<div class="grid">
-  <!-- LEFT: Tip Builder -->
-  <div>
-    <div class="card">
-      <label>Post Type</label>
-      <select id="postType">
-        <option value="free">Free Tip</option>
-        <option value="vip">VIP Tip</option>
-        <option value="result">Result / Update</option>
-        <option value="announcement">Announcement</option>
-      </select>
+const app = express();
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, 'public'))); // your HTML/CSS/JS in 'public'
 
-      <label style="margin-top:12px">Match (title)</label>
-      <input id="match" placeholder="Arsenal vs Brighton" />
+// Load environment variables
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const PORT = process.env.PORT || 3000;
 
-      <label style="margin-top:12px">Analysis (short)</label>
-      <textarea id="analysis" placeholder="Key points: Home form, injuries, xG..."></textarea>
+// Telegram bot
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-      <label style="margin-top:12px">Tip / Correct Score</label>
-      <input id="tip" placeholder="Correct Score — 2-1 or Over 2.5" />
+// Subscribers storage
+let subscribers = [];
+const subsFile = path.join(__dirname, 'subscribers.json');
 
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <div style="flex:1">
-          <label>Confidence</label>
-          <select id="confidence">
-            <option>Low</option>
-            <option selected>Medium</option>
-            <option>High</option>
-          </select>
-        </div>
-        <div style="width:140px">
-          <label>Kickoff (local/GMT)</label>
-          <input id="kickoff" type="text" placeholder="20:00 GMT" />
-        </div>
-      </div>
-
-      <label style="margin-top:12px">Extra Notes (optional)</label>
-      <input id="notes" placeholder="e.g. Stake: 1/10, Only for VIP" />
-
-      <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
-        <button id="previewBtn">Preview</button>
-        <button id="sendBtn">Send to Subscribers</button>
-        <button id="saveBtn" style="background:#334155">Save Locally</button>
-        <button id="clearBtn" class="danger">Clear Form</button>
-      </div>
-    </div>
-
-    <!-- History -->
-    <div class="card">
-      <label>Local Tip History</label>
-      <div id="historyList" style="margin-top:10px;max-height:260px;overflow:auto"></div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button id="clearHistory" style="background:#334155">Clear History</button>
-        <button id="exportHistory" style="background:#0ea5a4">Export JSON</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- RIGHT: Subscribers -->
-  <div>
-    <div class="card">
-      <label>Subscriber List</label>
-      <div class="sub-list" id="subList">Loading...</div>
-    </div>
-
-    <div class="card">
-      <label>Last Server Response</label>
-      <pre id="serverResp" class="preview">No requests yet.</pre>
-    </div>
-
-    <div class="card">
-      <label>Odds & Prices</label>
-      <div class="row">
-        <input id="dailyOdds" placeholder="Daily Odds, e.g., 2-5" />
-        <input id="dailyPrice" placeholder="Daily Price" />
-      </div>
-      <div class="row">
-        <input id="weeklyOdds" placeholder="Weekly Odds" />
-        <input id="weeklyPrice" placeholder="Weekly Price" />
-      </div>
-      <div class="row">
-        <input id="monthlyOdds" placeholder="Monthly Odds" />
-        <input id="monthlyPrice" placeholder="Monthly Price" />
-      </div>
-      <div class="row">
-        <input id="yearlyOdds" placeholder="Yearly Odds" />
-        <input id="yearlyPrice" placeholder="Yearly Price" />
-      </div>
-      <button id="saveOdds">Save Odds & Prices</button>
-    </div>
-
-    <div class="card">
-      <label>Disclaimer</label>
-      <div class="small">
-        All predictions are opinions based on analysis and statistics. No guaranteed outcomes. Bet responsibly.
-      </div>
-    </div>
-  </div>
-</div>
-
-<footer style="margin-top:14px;text-align:center;color:var(--muted);font-size:13px">
-Built for MatchIQ • Keep your bot token on your server • © Your Brand
-</footer>
-
-<script>
-const postTypeEl = document.getElementById('postType');
-const matchEl = document.getElementById('match');
-const analysisEl = document.getElementById('analysis');
-const tipEl = document.getElementById('tip');
-const confidenceEl = document.getElementById('confidence');
-const kickoffEl = document.getElementById('kickoff');
-const notesEl = document.getElementById('notes');
-const previewEl = document.getElementById('preview');
-const serverRespEl = document.getElementById('serverResp');
-const historyList = document.getElementById('historyList');
-const subList = document.getElementById('subList');
-
-let history = JSON.parse(localStorage.getItem('tipHistory')||'[]');
-renderHistory();
-
-function buildPost() {
-  const postType = postTypeEl.value;
-  let lines = [];
-  if(postType==='announcement') lines.push('📢 ANNOUNCEMENT');
-  if(postType==='vip') lines.push('💎 VIP ANALYSIS');
-  if(postType==='free') lines.push('🆓 FREE TIP');
-  if(postType==='result') lines.push('✅ RESULT');
-
-  if(matchEl.value) lines.push('⚽ Match: '+matchEl.value);
-  if(analysisEl.value) lines.push('📊 Analysis: '+analysisEl.value);
-  if(tipEl.value) lines.push('🎯 Tip: '+tipEl.value);
-  if(confidenceEl.value) lines.push('📈 Confidence: '+confidenceEl.value);
-  if(kickoffEl.value) lines.push('🕒 Kickoff: '+kickoffEl.value);
-  if(notesEl.value) lines.push('📝 Notes: '+notesEl.value);
-
-  lines.push('\n⚠️ Disclaimer: All tips are predictions. Bet responsibly.');
-  return lines.join('\n');
+// Load subscribers from file if exists
+if (fs.existsSync(subsFile)) {
+  subscribers = JSON.parse(fs.readFileSync(subsFile));
 }
 
-// Preview
-document.getElementById('previewBtn').addEventListener('click', ()=>{
-  previewEl.textContent = buildPost();
-});
+// Odds/prices storage
+let oddsPrices = {
+  daily: { odds: '', price: '' },
+  weekly: { odds: '', price: '' },
+  monthly: { odds: '', price: '' },
+  yearly: { odds: '', price: '' }
+};
 
-// Save history
-document.getElementById('saveBtn').addEventListener('click', ()=>{
-  const item = {
-    id: Date.now(),
-    postType: postTypeEl.value,
-    match: matchEl.value,
-    analysis: analysisEl.value,
-    tip: tipEl.value,
-    confidence: confidenceEl.value,
-    kickoff: kickoffEl.value,
-    notes: notesEl.value,
-    text: buildPost()
-  };
-  history.unshift(item);
-  if(history.length>200) history.pop();
-  localStorage.setItem('tipHistory', JSON.stringify(history));
-  renderHistory();
-  alert('Saved locally.');
-});
+// Save subscribers helper
+function saveSubscribers() {
+  fs.writeFileSync(subsFile, JSON.stringify(subscribers, null, 2));
+}
 
-function renderHistory(){
-  historyList.innerHTML='';
-  if(history.length===0){ historyList.innerHTML='<div class="small">No saved posts yet.</div>'; return; }
-  history.forEach(h=>{
-    const d = document.createElement('div'); d.className='history-item';
-    d.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
-      <div><strong>${escapeHtml(h.match||h.postType)}</strong><div class="small">${escapeHtml(h.postType)} • ${new Date(h.id).toLocaleString()}</div></div>
-      <div style="display:flex;gap:6px">
-        <button onclick='useHistory(${h.id})'>Load</button>
-        <button onclick='sendFromHistory(${h.id})' style="background:#0ea5a4">Send</button>
-      </div>
-    </div>
-    <div style="margin-top:8px" class="small">${escapeHtml(h.text)}</div>`;
-    historyList.appendChild(d);
+// Save odds helper
+function saveOdds() {
+  const file = path.join(__dirname, 'oddsPrices.json');
+  fs.writeFileSync(file, JSON.stringify(oddsPrices, null, 2));
+}
+
+// Load odds if exists
+const oddsFile = path.join(__dirname, 'oddsPrices.json');
+if (fs.existsSync(oddsFile)) {
+  oddsPrices = JSON.parse(fs.readFileSync(oddsFile));
+}
+
+// --- Express API ---
+// Send tip from admin dashboard
+app.post('/api/sendTip', (req, res) => {
+  const { text } = req.body;
+  let sent = 0;
+  subscribers.filter(s => s.status === 'approved').forEach(sub => {
+    bot.sendMessage(sub.id, text).catch(() => {});
+    sent++;
   });
-}
-
-window.useHistory = function(id){
-  const h = history.find(x=>x.id===id);
-  if(!h) return alert('Not found');
-  matchEl.value=h.match||'';
-  analysisEl.value=h.analysis||'';
-  tipEl.value=h.tip||'';
-  confidenceEl.value=h.confidence||'Medium';
-  kickoffEl.value=h.kickoff||'';
-  notesEl.value=h.notes||'';
-  postTypeEl.value=h.postType||'free';
-  previewEl.textContent=buildPost();
-}
-
-// Send tip
-document.getElementById('sendBtn').addEventListener('click', async ()=>{
-  const payload = { text: buildPost() };
-  try {
-    serverRespEl.textContent='Sending...';
-    const res = await fetch('/api/sendTip',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    serverRespEl.textContent=JSON.stringify(data,null,2);
-  } catch(err){ serverRespEl.textContent='Error: '+err.message; }
+  res.json({ success: true, sent });
 });
 
-// Escape HTML
-function escapeHtml(str=''){ return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+// Get subscriber list
+app.get('/api/subscribers', (req, res) => {
+  res.json(subscribers);
+});
 
-// Load subscribers
-async function loadSubscribers(){
-  try {
-    const res = await fetch('/api/subscribers');
-    const data = await res.json();
-    subList.innerHTML='';
-    if(data.length===0){ subList.innerHTML='<div class="small">No subscribers yet.</div>'; return; }
-    data.forEach(s=>{
-      const d = document.createElement('div'); d.className='sub-item';
-      d.innerHTML=`<span>${s.username || s.id} (${s.subscriptionType})</span>
-      <span>
-      ${s.status} • Expires: ${s.endDate?new Date(s.endDate).toLocaleString():'N/A'}
-      </span>
-      <div style="display:flex;gap:4px">
-      ${s.status==='pending'?'<button onclick="approveSub(\''+s.id+'\')">Approve</button><button onclick="rejectSub(\''+s.id+'\')">Reject</button>':''}
-      </div>`;
-      subList.appendChild(d);
-    });
-  } catch(err){ subList.innerHTML='Failed to load subscribers'; }
-}
+// Approve subscription
+app.post('/api/approveSub/:id', (req, res) => {
+  const sub = subscribers.find(s => s.id == req.params.id);
+  if (sub) sub.status = 'approved';
+  saveSubscribers();
+  res.json({ success: true });
+});
 
-async function approveSub(id){
-  await fetch('/api/approveSub/'+id,{method:'POST'});
-  loadSubscribers();
-}
+// Reject subscription
+app.post('/api/rejectSub/:id', (req, res) => {
+  const subIndex = subscribers.findIndex(s => s.id == req.params.id);
+  if (subIndex > -1) subscribers.splice(subIndex, 1);
+  saveSubscribers();
+  res.json({ success: true });
+});
 
-async function rejectSub(id){
-  await fetch('/api/rejectSub/'+id,{method:'POST'});
-  loadSubscribers();
-}
+// Save odds & prices
+app.post('/api/saveOdds', (req, res) => {
+  oddsPrices = req.body;
+  saveOdds();
+  res.json({ success: true });
+});
 
-loadSubscribers();
-setInterval(loadSubscribers, 60*1000); // Refresh every minute
-</script>
-</body>
-</html>
+// --- Telegram Bot Commands ---
+bot.onText(/\/start/, (msg) => {
+  const userId = msg.from.id;
+  const username = msg.from.username || `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
+  
+  // Add subscriber if new
+  if (!subscribers.find(s => s.id === userId)) {
+    subscribers.push({ id: userId, username, status: 'free', subscriptionType: 'free', endDate: null });
+    saveSubscribers();
+  }
+  
+  const totalSubs = subscribers.length;
+  
+  bot.sendMessage(userId, 
+    `📢 Welcome to MATCHIQ Tips!\n\nGet daily, weekly, monthly, yearly, and free odds here.\n\nTotal Subscribers: ${totalSubs}\n\nUse /subscribe to get VIP tips or /help to see commands.`
+  );
+});
+
+bot.onText(/\/help/, (msg) => {
+  bot.sendMessage(msg.from.id, 
+    `Available commands:\n/subscribe - Subscribe to VIP tips\n/status - Check subscription\n/help - Show commands`
+  );
+});
+
+bot.onText(/\/status/, (msg) => {
+  const user = subscribers.find(s => s.id === msg.from.id);
+  if (!user) return bot.sendMessage(msg.from.id, 'You are not subscribed yet.');
+  const status = user.status === 'approved' ? 'Active' : 'Pending';
+  bot.sendMessage(msg.from.id, `Subscription: ${user.subscriptionType}\nStatus: ${status}\nExpires: ${user.endDate ? new Date(user.endDate).toLocaleString() : 'N/A'}`);
+});
+
+// Handle /subscribe
+bot.onText(/\/subscribe/, (msg) => {
+  const userId = msg.from.id;
+  const user = subscribers.find(s => s.id === userId) || { id: userId, username: msg.from.username, status: 'free', subscriptionType: 'free', endDate: null };
+
+  const opts = {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: `Daily - ${oddsPrices.daily.odds || 'N/A'} - GHS ${oddsPrices.daily.price || 'N/A'}`, callback_data: 'subscribe_daily' }],
+        [{ text: `Weekly - ${oddsPrices.weekly.odds || 'N/A'} - GHS ${oddsPrices.weekly.price || 'N/A'}`, callback_data: 'subscribe_weekly' }],
+        [{ text: `Monthly - ${oddsPrices.monthly.odds || 'N/A'} - GHS ${oddsPrices.monthly.price || 'N/A'}`, callback_data: 'subscribe_monthly' }],
+        [{ text: `Yearly - ${oddsPrices.yearly.odds || 'N/A'} - GHS ${oddsPrices.yearly.price || 'N/A'}`, callback_data: 'subscribe_yearly' }],
+        [{ text: `Free Tips`, callback_data: 'subscribe_free' }]
+      ]
+    }
+  };
+
+  bot.sendMessage(userId, "Choose a subscription plan:", opts);
+});
+
+// Handle callback queries (button clicks)
+bot.on('callback_query', async (query) => {
+  const userId = query.from.id;
+  const data = query.data;
+  const user = subscribers.find(s => s.id === userId);
+  
+  if (!user) {
+    return bot.sendMessage(userId, "Please start the bot first with /start");
+  }
+
+  if (data === 'subscribe_free') {
+    user.subscriptionType = 'free';
+    user.status = 'approved';
+    user.endDate = null;
+    saveSubscribers();
+    return bot.sendMessage(userId, 'You are now subscribed to Free Tips!');
+  }
+
+  // Paid subscriptions
+  let type = data.split('_')[1];
+  let price = oddsPrices[type].price || 'N/A';
+  user.subscriptionType = type;
+  user.status = 'pending';
+  saveSubscribers();
+
+  bot.sendMessage(userId, `You selected ${type} subscription.\nPlease send your payment of GHS ${price} to +2335622504 (Richard Atidepe).\n\nAfter payment, send a screenshot of the receipt here.`);
+
+  // Notify admin
+  const adminIds = subscribers.filter(s => s.status==='admin').map(a=>a.id);
+  adminIds.forEach(adminId => {
+    bot.sendMessage(adminId, `User @${user.username || user.id} selected ${type} subscription and is pending payment.`);
+  });
+});
+
+// Receive photo (payment screenshot)
+bot.on('photo', async (msg) => {
+  const user = subscribers.find(s => s.id === msg.from.id);
+  if (!user || user.status !== 'pending') return;
+
+  // save screenshot info
+  if (!user.screenshots) user.screenshots = [];
+  user.screenshots.push(msg.photo[msg.photo.length-1].file_id);
+  saveSubscribers();
+
+  // Notify admin
+  const adminIds = subscribers.filter(s => s.status==='admin').map(a=>a.id);
+  adminIds.forEach(adminId => {
+    bot.sendPhoto(adminId, msg.photo[msg.photo.length-1].file_id, { caption: `Payment screenshot from @${user.username || user.id} for ${user.subscriptionType} subscription.` });
+  });
+
+  bot.sendMessage(msg.from.id, 'Screenshot received. Admin will review and approve your subscription.');
+});
+
+// Start server
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
