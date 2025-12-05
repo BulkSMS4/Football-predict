@@ -1,35 +1,36 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Admin Login — MatchIQ</title>
 <style>
-  body{font-family:sans-serif;background:#071b2b;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
-  .login-card{background:#0b1220;padding:32px;border-radius:12px;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
-  input{width:100%;padding:10px;margin:10px 0;border-radius:8px;border:1px solid #06b6d4;background:transparent;color:#fff}
-  button{background:#06b6d4;color:#022;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:600}
-  img{width:64px;height:64px;margin-bottom:12px}
+body{font-family:sans-serif;background:#0f1724;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.card{background:#0b1220;padding:24px;border-radius:12px;width:320px;text-align:center;box-shadow:0 8px 20px rgba(0,0,0,0.7)}
+.card img{width:80px;height:80px;margin-bottom:12px}
+input[type=password]{width:100%;padding:10px;margin:8px 0;border-radius:8px;border:none}
+button{width:100%;padding:10px;background:#06b6d4;border:none;border-radius:8px;color:#fff;font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
-  <div class="login-card">
-    <img src="logo.png" alt="Admin Logo" />
-    <h2>Telegram Tips Admin</h2>
-    <input id="password" type="password" placeholder="Enter admin password" />
-    <button onclick="login()">Login</button>
-    <div id="msg" style="color:#f00;margin-top:8px"></div>
-  </div>
+<div class="card">
+<img src="https://i.ibb.co/2tLJxHw/logo.png" alt="Admin Logo"/>
+<h2>Admin Login</h2>
+<input type="password" id="pass" placeholder="Enter password"/>
+<button onclick="login()">Login</button>
+<div id="msg" style="margin-top:8px;color:#f87171"></div>
+</div>
 
-  <script>
-    function login(){
-      const pass = document.getElementById('password').value;
-      if(!pass) return document.getElementById('msg').textContent='Enter password';
-
-      // Simple client-side redirect to admin.html with password hidden
-      localStorage.setItem('admin_pass', pass);
-      window.location.href = 'admin.html';
-    }
-  </script>
+<script>
+function login(){
+  const pass = document.getElementById('pass').value;
+  if(pass===localStorage.getItem('ADMIN_PASSWORD') || pass==='${process.env.ADMIN_PASSWORD}'){
+    localStorage.setItem('LOGGED_IN','true');
+    window.location.href='telegram_admin.html';
+  } else {
+    document.getElementById('msg').textContent='Incorrect password';
+  }
+}
+</script>
 </body>
 </html>
