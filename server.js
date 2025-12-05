@@ -1,176 +1,139 @@
-require('dotenv').config();
 const express = require('express');
-const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
+const bodyParser = require('body-parser');
 const TelegramBot = require('node-telegram-bot-api');
+
+require('dotenv').config();
 
 const app = express();
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-const PORT = process.env.PORT || 3000;
+const TOKEN = process.env.BOT_TOKEN;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'yourpassword';
+const bot = new TelegramBot(TOKEN, { polling: true });
 
-// Load subscribers from JSON
-const SUB_FILE = './subscribers.json';
-let subscribers = [];
-if(fs.existsSync(SUB_FILE)){
-  subscribers = JSON.parse(fs.readFileSync(SUB_FILE));
+const subscribersPath = path.join(__dirname, 'public', 'subscribe.json');
+
+// Utilities
+function getSubscribers() {
+  if (!fs.existsSync(subscribersPath)) return [];
+  const data = fs.readFileSync(subscribersPath);
+  return JSON.parse(data).subscribers || [];
 }
 
-// Save subscribers
-function saveSubscribers(){
-  fs.writeFileSync(SUB_FILE, JSON.stringify(subscribers, null,2));
+function saveSubscribers(subs) {
+  fs.writeFileSync(subscribersPath, JSON.stringify({ subscribers: subs }, null, 2));
 }
 
-// Telegram bot
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+function isActiveSubscriber(id) {
+  const subs = getSubscribers();
+  const sub = subs.find(s => s.id === id);
+  if (!sub) return false;
+  return new Date(sub.endDate) > new Date();
+}
 
-// Admin login check
+function addOrUpdateSubscriber(id, username, type, durationDays) {
+  let subs = getSubscribers();
+  const now = new Date();
+  const endDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+  const existing = subs.find(s => s.id === id);
+
+  if (existing) {
+    existing.subscriptionType = type;
+    existing.startDate = now.toISOString();
+    existing.endDate = endDate.toISOString();
+    existing.username = username;
+  } else {
+    subs.push({ id, username, subscriptionType: type, startDate: now.toISOString(), endDate: endDate.toISOString() });
+  }
+  saveSubscribers(subs);
+}
+
+// Admin dashboard route
 app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin_login.html'));
+  res.sendFile(path.join(__dirname, 'public', 'telegram_admin.html'));
 });
 
-// API: Subscribe
-app.post('/api/subscribe', (req,res)=>{
-  const { chatId, username, type, duration } = req.body;
-  const expiry = new Date();
-  expiry.setDate(expiry.getDate() + duration);
-
-  let sub = subscribers.find(s => s.chatId === chatId);
-  if(sub){
-    sub.type = type;
-    sub.expiry = expiry;
-    sub.active = true;
-  } else {
-    subscribers.push({ chatId, username, type, expiry, active: true });
-  }
-  saveSubscribers();
-  res.json({ message: 'Subscribed', expiry });
+// API to send tips
+app.post('/api/sendTip', (req, res) => {
+  const { target, text } = req.body;
+  if (!target || !text) return res.status(400).json({ error: 'Missing target or text' });
+  bot.sendMessage(target, text).then(() => res.json({ success: true })).catch(err => res.status(500).json({ error: err.message }));
 });
 
-// API: Send tip
-app.post('/api/sendTip', (req,res)=>{
-  const { target, text, meta } = req.body;
-  const now = new Date();
-
-  if(meta.postType === 'vip'){
-    // Only send to active subscribers
-    subscribers.forEach(s => {
-      if(s.active && new Date(s.expiry) > now){
-        bot.sendMessage(s.chatId, `💎 VIP TIP\n\n${text}`);
-      }
-    });
-  } else {
-    // Send free tips to everyone or channel
-    if(target){
-      bot.sendMessage(target, text).catch(console.log);
-    }
-  }
-  // Notify all active subscribers about new game if free
-  if(meta.postType === 'free'){
-    subscribers.forEach(s => {
-      if(s.active) bot.sendMessage(s.chatId, `🆓 New Game Tip:\n\n${text}`);
-    });
-  }
-
-  res.json({ success:true });
+// API to get subscribers (for admin dashboard)
+app.get('/api/subscribers', (req, res) => {
+  res.json(getSubscribers());
 });
 
-// Periodic check to expire subscriptions and alert users
-setInterval(()=>{
-  const now = new Date();
-  subscribers.forEach(s => {
-    if(s.active){
-      const diff = (new Date(s.expiry) - now)/(1000*60*60*24);
-      if(diff <=0){
-        s.active=false;
-        bot.sendMessage(s.chatId, '⛔ Your VIP subscription expired. Please renew.');
-      } else if(diff <=1){
-        bot.sendMessage(s.chatId, `⚠️ VIP subscription expiring soon (${diff.toFixed(1)} days)`);
-      }
-    }
-  });
-  saveSubscribers();
-}, 1000*60*60); // every hour
-
-// Start server
-app.listen(PORT, ()=>console.log(`Server running on port ${PORT}`));
-
-/* ---------------- Telegram Bot Commands ---------------- */
-
-// /start
-bot.onText(/\/start/, (msg)=>{
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId,
-`👋 Welcome to MatchIQ VIP Tips Bot!
-Use:
-/subscribe - Join VIP
-/status - Check subscription
-/help - Show commands`);
-});
-
-// /help
-bot.onText(/\/help/, (msg)=>{
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId,
-`Commands:
-/subscribe - Subscribe to VIP tips
-/status - Check your subscription
-/help - Show commands`);
-});
-
-// /status
-bot.onText(/\/status/, (msg)=>{
-  const chatId = msg.chat.id;
-  const sub = subscribers.find(s => s.chatId===chatId);
-  if(!sub) return bot.sendMessage(chatId,'You are not subscribed yet.');
-  const remaining = Math.max(0,(new Date(sub.expiry)-new Date())/(1000*60*60*24));
-  const status = sub.active ? 'Active ✅' : 'Expired ⛔';
-  bot.sendMessage(chatId, `Subscription: ${sub.type}\nStatus: ${status}\nDays remaining: ${remaining.toFixed(1)}`);
-});
-
-// /subscribe
-bot.onText(/\/subscribe/, (msg)=>{
+// Telegram bot commands
+bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
   const username = msg.from.username || msg.from.first_name;
-  bot.sendMessage(chatId,'Select your subscription plan:', {
-    reply_markup:{
-      inline_keyboard:[
-        [{ text:'Daily', callback_data:'subscribe_daily' },{ text:'Weekly', callback_data:'subscribe_weekly' }],
-        [{ text:'Monthly', callback_data:'subscribe_monthly' },{ text:'Yearly', callback_data:'subscribe_yearly' }]
+
+  const opts = {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "Daily", callback_data: "subscribe_daily" },
+          { text: "Weekly", callback_data: "subscribe_weekly" },
+          { text: "Monthly", callback_data: "subscribe_monthly" },
+          { text: "Yearly", callback_data: "subscribe_yearly" }
+        ]
       ]
     }
-  });
-});
+  };
 
-// handle subscription selection
-bot.on('callback_query', async (callbackQuery)=>{
-  const chatId = callbackQuery.message.chat.id;
-  const username = callbackQuery.from.username || callbackQuery.from.first_name;
-  const data = callbackQuery.data;
-  let plan='', duration=0;
-
-  if(data==='subscribe_daily'){ plan='Daily'; duration=1; }
-  else if(data==='subscribe_weekly'){ plan='Weekly'; duration=7; }
-  else if(data==='subscribe_monthly'){ plan='Monthly'; duration=30; }
-  else if(data==='subscribe_yearly'){ plan='Yearly'; duration=365; }
-
-  if(plan){
-    // call API
-    const fetch = require('node-fetch');
-    const res = await fetch(`${process.env.SERVER_URL}/api/subscribe`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ chatId, username, type:plan, duration })
-    });
-    const data = await res.json();
-    bot.sendMessage(chatId, `✅ Subscribed for ${plan} VIP Tips!\nExpiry: ${new Date(data.expiry).toLocaleString()}`);
+  if (isActiveSubscriber(chatId)) {
+    bot.sendMessage(chatId, "✅ You are already subscribed to VIP.", { parse_mode: "Markdown" });
+  } else {
+    bot.sendMessage(chatId, `Welcome ${username}! Choose a subscription plan:`, opts);
   }
 });
 
-// /admin command to open admin dashboard
-bot.onText(/\/admin/, (msg)=>{
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId, `Open Admin Dashboard: ${process.env.SERVER_URL}/admin`);
+// Handle subscription button clicks
+bot.on('callback_query', (query) => {
+  const chatId = query.message.chat.id;
+  const username = query.from.username || query.from.first_name;
+  const data = query.data;
+
+  let durationDays = 0;
+  let type = "";
+
+  switch (data) {
+    case 'subscribe_daily':
+      durationDays = 1; type = 'daily'; break;
+    case 'subscribe_weekly':
+      durationDays = 7; type = 'weekly'; break;
+    case 'subscribe_monthly':
+      durationDays = 30; type = 'monthly'; break;
+    case 'subscribe_yearly':
+      durationDays = 365; type = 'yearly'; break;
+    default: return;
+  }
+
+  addOrUpdateSubscriber(chatId, username, type, durationDays);
+  bot.answerCallbackQuery(query.id, { text: `Subscribed to ${type} plan! ✅` });
+  bot.sendMessage(chatId, `🎉 You are now subscribed for ${type}. Enjoy VIP tips!`);
 });
+
+// Periodic check to alert about expiring subscriptions (every hour)
+setInterval(() => {
+  const subs = getSubscribers();
+  const now = new Date();
+  subs.forEach(sub => {
+    const end = new Date(sub.endDate);
+    const remaining = Math.floor((end - now)/1000/60/60); // in hours
+    if (remaining > 0 && remaining <= 24) {
+      bot.sendMessage(sub.id, `⚠️ Your ${sub.subscriptionType} VIP subscription is ending in less than 24 hours.`);
+    }
+    if (remaining <= 0) {
+      bot.sendMessage(sub.id, `❌ Your ${sub.subscriptionType} VIP subscription has expired. Please renew to continue receiving VIP tips.`);
+    }
+  });
+}, 1000 * 60 * 60); // every 1 hour
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
