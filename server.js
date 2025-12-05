@@ -1,130 +1,120 @@
-// server.js
-require('dotenv').config();
-const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const TelegramBot = require('node-telegram-bot-api');
+const express = require('express');
 const bodyParser = require('body-parser');
+const TelegramBot = require('node-telegram-bot-api');
 
 const app = express();
+app.use(bodyParser.json());
+app.use(express.static('public')); // serve HTML/CSS/JS
+
+// Environment variables
+const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'YOUR_ADMIN_PASSWORD';
 const PORT = process.env.PORT || 3000;
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'forgetme';
-const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || null; // optional
 
-const SUBSCRIBE_FILE = path.join(__dirname, 'subscribe.json');
-
-// Create file if not exists
-if(!fs.existsSync(SUBSCRIBE_FILE)) fs.writeFileSync(SUBSCRIBE_FILE, JSON.stringify([]));
-
+// Telegram Bot
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// --- Middleware ---
-app.use(bodyParser.json());
-app.use(express.static('public'));
+// Subscribers storage
+const SUB_FILE = path.join(__dirname, 'subscribe.json');
+let subscribers = [];
+if (fs.existsSync(SUB_FILE)) {
+  subscribers = JSON.parse(fs.readFileSync(SUB_FILE, 'utf8'));
+}
 
-// --- Admin login ---
-app.get('/admin', (req, res) => {
-  const pass = req.query.password;
-  if(pass !== ADMIN_PASSWORD) return res.status(401).send('Unauthorized: wrong password');
-  res.sendFile(path.join(__dirname, 'public/telegram_admin.html'));
-});
+// Save subscribers helper
+function saveSubscribers() {
+  fs.writeFileSync(SUB_FILE, JSON.stringify(subscribers, null, 2));
+}
 
-// --- Send Tip API ---
-app.post('/api/sendTip', async (req, res) => {
-  const { target, text, postType } = req.body;
+// Middleware to check admin password
+function checkAdminPassword(req, res, next) {
+  const password = req.query.password || req.headers['x-admin-password'];
+  if (password !== ADMIN_PASSWORD) return res.status(403).send({ error: 'Unauthorized' });
+  next();
+}
 
-  try {
-    let subscribers = JSON.parse(fs.readFileSync(SUBSCRIBE_FILE, 'utf8'));
-    if(postType === 'vip') {
-      // Only send VIP tips to active subscribers
-      const now = Date.now();
-      const activeSubs = subscribers.filter(s => s.endDate > now);
-      for(const sub of activeSubs){
-        await bot.sendMessage(sub.id, `💎 VIP Tip:\n\n${text}`);
+// API: Send tip
+app.post('/api/sendTip', (req, res) => {
+  const { text, target } = req.body;
+  if (!text || !target) return res.status(400).send({ error: 'Missing text or target' });
+
+  bot.sendMessage(target, text, { parse_mode: 'Markdown' })
+    .then(() => {
+      // Notify all active VIP subscribers if it's a VIP tip
+      if (text.includes('💎 VIP')) {
+        const now = Date.now();
+        subscribers.forEach(sub => {
+          if (sub.endDate > now) {
+            bot.sendMessage(sub.id, `New VIP Tip:\n\n${text}`, { parse_mode: 'Markdown' });
+          }
+        });
       }
-      return res.json({ status:'ok', sent: activeSubs.length });
-    } else {
-      // Free or other tips sent to target channel/user
-      if(!target) return res.status(400).json({ error:'Target required for free tips' });
-      await bot.sendMessage(target, text);
-      return res.json({ status:'ok', sentTo: target });
-    }
-  } catch(err){
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
+      res.send({ success: true });
+    })
+    .catch(err => res.status(500).send({ error: err.message }));
 });
 
-// --- Get Subscriber List ---
-app.get('/api/subscribers', (req, res) => {
-  try{
-    const subs = JSON.parse(fs.readFileSync(SUBSCRIBE_FILE, 'utf8'));
-    res.json(subs);
-  } catch(err){
-    res.status(500).json({ error: err.message });
-  }
+// API: Get subscriber list
+app.get('/api/subscribers', checkAdminPassword, (req, res) => {
+  res.send(subscribers);
 });
 
-// --- Telegram Commands & Subscription ---
-bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId,
-    `Welcome! Choose your subscription type to get VIP tips:`,
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text:'Daily', callback_data:'sub_daily' }],
-          [{ text:'Weekly', callback_data:'sub_weekly' }],
-          [{ text:'Monthly', callback_data:'sub_monthly' }],
-          [{ text:'Yearly', callback_data:'sub_yearly' }]
-        ]
-      }
-    }
-  );
-});
+// API: Add subscription
+app.post('/api/subscribe', (req, res) => {
+  const { id, username, type } = req.body; // type: daily, weekly, monthly, yearly
+  if (!id || !type) return res.status(400).send({ error: 'Missing id or subscription type' });
 
-bot.on('callback_query', async (query) => {
-  const chatId = query.message.chat.id;
-  const username = query.from.username || query.from.first_name;
-  let subs = JSON.parse(fs.readFileSync(SUBSCRIBE_FILE, 'utf8'));
-  const now = Date.now();
   let duration = 0;
-  let type = '';
+  if (type === 'daily') duration = 1 * 24 * 60 * 60 * 1000;
+  else if (type === 'weekly') duration = 7 * 24 * 60 * 60 * 1000;
+  else if (type === 'monthly') duration = 30 * 24 * 60 * 60 * 1000;
+  else if (type === 'yearly') duration = 365 * 24 * 60 * 60 * 1000;
 
-  switch(query.data){
-    case 'sub_daily': duration = 1*24*60*60*1000; type='Daily'; break;
-    case 'sub_weekly': duration = 7*24*60*60*1000; type='Weekly'; break;
-    case 'sub_monthly': duration = 30*24*60*60*1000; type='Monthly'; break;
-    case 'sub_yearly': duration = 365*24*60*60*1000; type='Yearly'; break;
-    default: return;
-  }
-
+  const now = Date.now();
   const endDate = now + duration;
-  const existing = subs.find(s => s.id === chatId);
-  if(existing){
+
+  const existing = subscribers.find(s => s.id === id);
+  if (existing) {
     existing.subscriptionType = type;
+    existing.startDate = now;
     existing.endDate = endDate;
+    existing.username = username;
   } else {
-    subs.push({ id: chatId, username, subscriptionType: type, endDate });
+    subscribers.push({ id, username, subscriptionType: type, startDate: now, endDate: endDate });
   }
 
-  fs.writeFileSync(SUBSCRIBE_FILE, JSON.stringify(subs, null, 2));
-  await bot.answerCallbackQuery(query.id, { text:`Subscribed ${type}!` });
-  bot.sendMessage(chatId, `✅ You are subscribed for ${type}. Your subscription will expire on ${new Date(endDate).toLocaleString()}`);
+  saveSubscribers();
+  res.send({ success: true, endDate });
 });
 
-// --- Periodic alerts for expiring subscriptions ---
-setInterval(() => {
-  let subs = JSON.parse(fs.readFileSync(SUBSCRIBE_FILE, 'utf8'));
-  const now = Date.now();
-  subs.forEach(s => {
-    const remaining = s.endDate - now;
-    if(remaining > 0 && remaining < 24*60*60*1000){ // less than 24h remaining
-      bot.sendMessage(s.id, `⚠️ Your ${s.subscriptionType} subscription is ending soon! Renew to continue receiving VIP tips.`);
-    }
-  });
-}, 60*60*1000); // every hour
+// Telegram bot: handle admin command
+bot.onText(/\/admin/, msg => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(chatId, `Open admin dashboard: /adminlogin`);
+});
 
-// --- Deploy ---
+// Telegram bot: handle admin login link
+bot.onText(/\/adminlogin/, msg => {
+  const chatId = msg.chat.id;
+  const url = `https://yourdomain.com/telegram_admin.html?password=${ADMIN_PASSWORD}`;
+  bot.sendMessage(chatId, `Open admin dashboard:\n${url}`);
+});
+
+// Periodic check: notify about expiry 1 day before
+setInterval(() => {
+  const now = Date.now();
+  subscribers.forEach(sub => {
+    const diff = sub.endDate - now;
+    if (diff > 0 && diff < 24*60*60*1000 && !sub.alertSent) {
+      bot.sendMessage(sub.id, `⚠️ Your subscription (${sub.subscriptionType}) will expire soon! Renew to continue accessing VIP tips.`);
+      sub.alertSent = true;
+    }
+    // block expired users
+    if (diff <= 0) sub.blocked = true;
+  });
+  saveSubscribers();
+}, 60 * 60 * 1000); // every hour
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
