@@ -1,276 +1,168 @@
-// server.js
-const fs = require('fs');
+require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
-const express = require('express');
-const bodyParser = require('body-parser');
-const app = express();
+const fs = require('fs');
 
-app.use(bodyParser.json());
+const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
-// ====== CONFIG ======
-const BOT_TOKEN = '8596462347:AAF8B11EYoPKaaVFQgzC2dvIDcAKkPc4ybQ';
-const ADMIN_PASSWORD = 'forgetme';
-const ADMIN_ID = '@Kj9000000'; // optional
-const PORT = process.env.PORT || 3000;
+const ADMIN_IDS = [6482794683]; // ✅ YOUR TELEGRAM ID
+const VIP_CHANNEL_ID = '-100XXXXXXXXXX'; // ✅ Your private channel ID
 
-// ====== STORAGE FILES ======
-const SUB_FILE = './subscribe.json';
-const TIP_FILE = './tipHistory.json';
+const DB_FILE = './subscribe.json';
 
-if (!fs.existsSync(SUB_FILE)) fs.writeFileSync(SUB_FILE, JSON.stringify([]));
-if (!fs.existsSync(TIP_FILE)) fs.writeFileSync(TIP_FILE, JSON.stringify([]));
-
-let subscribers = JSON.parse(fs.readFileSync(SUB_FILE));
-let tipHistory = JSON.parse(fs.readFileSync(TIP_FILE));
-
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
-let adminSessions = {}; // admin session states
-
-function saveSubscribers() { fs.writeFileSync(SUB_FILE, JSON.stringify(subscribers, null, 2)); }
-function saveTips() { fs.writeFileSync(TIP_FILE, JSON.stringify(tipHistory, null, 2)); }
-
-function checkSubscription(userId) {
-    const now = Date.now();
-    return subscribers.find(s => s.id == userId && s.endDate > now) || null;
+/* ---------- DATABASE ---------- */
+function loadDB() {
+  if (!fs.existsSync(DB_FILE)) {
+    fs.writeFileSync(DB_FILE, JSON.stringify({ users: {} }, null, 2));
+  }
+  return JSON.parse(fs.readFileSync(DB_FILE));
 }
 
-// ====== START ======
-bot.onText(/\/start/, (msg) => {
-    bot.sendMessage(msg.chat.id, 'Welcome! Use /admin to login as admin or /subscribe to get VIP tips.');
-});
-
-// ====== ADMIN LOGIN ======
-bot.onText(/\/admin/, (msg) => {
-    const chatId = msg.chat.id;
-    bot.sendMessage(chatId, 'Enter admin password:');
-    adminSessions[chatId] = { step: 'await_password' };
-});
-
-bot.on('message', async (msg) => {
-    const chatId = msg.chat.id;
-    const text = msg.text;
-    if (!adminSessions[chatId]) return;
-
-    const session = adminSessions[chatId];
-
-    // Password check
-    if (session.step === 'await_password') {
-        if (text === ADMIN_PASSWORD && (ADMIN_ID == 0 || chatId == ADMIN_ID)) {
-            adminSessions[chatId] = { step: 'menu' };
-            bot.sendMessage(chatId, '✅ Logged in as admin.', { reply_markup: adminMenu() });
-        } else {
-            bot.sendMessage(chatId, '❌ Wrong password.');
-            delete adminSessions[chatId];
-        }
-        return;
-    }
-
-    // Tip workflow inputs
-    if (session.step && session.step.startsWith('tip_')) {
-        switch (session.step) {
-            case 'tip_match':
-                session.tipData.match = text;
-                session.step = 'tip_analysis';
-                bot.sendMessage(chatId, 'Enter Analysis (short):');
-                break;
-            case 'tip_analysis':
-                session.tipData.analysis = text;
-                session.step = 'tip_tip';
-                bot.sendMessage(chatId, 'Enter Tip / Correct Score:');
-                break;
-            case 'tip_tip':
-                session.tipData.tip = text;
-                session.step = 'tip_confidence';
-                bot.sendMessage(chatId, 'Enter Confidence (Low, Medium, High):', {
-                    reply_markup: {
-                        keyboard: [['Low','Medium','High']], one_time_keyboard: true, resize_keyboard:true
-                    }
-                });
-                break;
-            case 'tip_confidence':
-                session.tipData.confidence = text;
-                session.step = 'tip_kickoff';
-                bot.sendMessage(chatId, 'Enter Kickoff time (local/GMT):');
-                break;
-            case 'tip_kickoff':
-                session.tipData.kickoff = text;
-                session.step = 'tip_notes';
-                bot.sendMessage(chatId, 'Enter Extra Notes (optional):');
-                break;
-            case 'tip_notes':
-                session.tipData.notes = text;
-                session.step = 'tip_preview';
-                // Show preview
-                const previewText = buildPost(session.tipData);
-                session.tipData.previewText = previewText;
-                bot.sendMessage(chatId, `Preview:\n\n${previewText}`, {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: '✅ Send', callback_data: 'send_confirm' }],
-                            [{ text: '❌ Cancel', callback_data: 'send_cancel' }]
-                        ]
-                    }
-                });
-                break;
-        }
-        return;
-    }
-});
-
-// ====== ADMIN MENU ======
-function adminMenu() {
-    return {
-        inline_keyboard: [
-            [{ text: '📝 Send Tip', callback_data: 'send_tip' }],
-            [{ text: '📄 View Subscribers', callback_data: 'view_subs' }],
-            [{ text: '📜 Tip History', callback_data: 'view_history' }]
-        ]
-    };
+function saveDB(db) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
 }
 
-// ====== CALLBACK HANDLER ======
-bot.on('callback_query', async (callbackQuery) => {
-    const chatId = callbackQuery.message.chat.id;
-    const data = callbackQuery.data;
-    if (!adminSessions[chatId]) return bot.answerCallbackQuery(callbackQuery.id, { text: 'Session expired.' });
+/* ---------- SUBSCRIPTION TIME ---------- */
+const PLANS = {
+  daily: 1,
+  weekly: 7,
+  monthly: 30,
+  yearly: 365
+};
 
-    const session = adminSessions[chatId];
-
-    // Admin menu actions
-    if (session.step === 'menu') {
-        switch (data) {
-            case 'send_tip':
-                session.tipData = {};
-                session.step = 'tip_post_type';
-                bot.sendMessage(chatId, 'Select Post Type:', {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: 'Free', callback_data: 'type_free' }],
-                            [{ text: 'VIP', callback_data: 'type_vip' }],
-                            [{ text: 'Result', callback_data: 'type_result' }],
-                            [{ text: 'Announcement', callback_data: 'type_announcement' }]
-                        ]
-                    }
-                });
-                break;
-            case 'view_subs':
-                let msg = '📋 Subscribers:\n';
-                if(subscribers.length === 0) msg += 'No subscribers yet.';
-                else subscribers.forEach(s=>{
-                    msg += `• ${s.username || s.id} — ${s.subscriptionType} — Expires: ${new Date(s.endDate).toLocaleString()}\n`;
-                });
-                bot.sendMessage(chatId, msg);
-                break;
-            case 'view_history':
-                let histMsg = '📜 Tip History:\n';
-                if(tipHistory.length===0) histMsg+='No tips yet.';
-                else tipHistory.slice(-20).forEach(t=>{
-                    histMsg += `• ${t.postType} — ${t.match} — ${t.tip}\n`;
-                });
-                bot.sendMessage(chatId, histMsg);
-                break;
-        }
-        return bot.answerCallbackQuery(callbackQuery.id);
-    }
-
-    // Tip post type selection
-    if (session.step === 'tip_post_type') {
-        const typeMap = { 'type_free':'free', 'type_vip':'vip', 'type_result':'result', 'type_announcement':'announcement' };
-        session.tipData.postType = typeMap[data];
-        session.step = 'tip_match';
-        bot.sendMessage(chatId, 'Enter Match title (e.g., Arsenal vs Brighton):');
-        return bot.answerCallbackQuery(callbackQuery.id);
-    }
-
-    // Send / Cancel tip
-    if (session.step === 'tip_preview') {
-        if (data === 'send_confirm') {
-            sendTipToSubscribers(session.tipData);
-            tipHistory.push(session.tipData);
-            if (tipHistory.length>200) tipHistory.shift();
-            saveTips();
-            bot.sendMessage(chatId, '✅ Tip sent to subscribers.');
-            session.step = 'menu';
-            bot.sendMessage(chatId, 'Back to menu', { reply_markup: adminMenu() });
-        } else if (data === 'send_cancel') {
-            session.step = 'menu';
-            bot.sendMessage(chatId, '❌ Tip sending cancelled.', { reply_markup: adminMenu() });
-        }
-        return bot.answerCallbackQuery(callbackQuery.id);
-    }
-});
-
-// ====== BUILD POST TEXT ======
-function buildPost(data) {
-    let lines = [];
-    if(data.postType==='announcement') lines.push('📢 ANNOUNCEMENT');
-    if(data.postType==='vip') lines.push('💎 VIP TIP');
-    if(data.postType==='free') lines.push('🆓 FREE TIP');
-    if(data.postType==='result') lines.push('✅ RESULT');
-
-    if(data.match) lines.push('⚽ Match: '+data.match);
-    if(data.analysis) lines.push('📊 Analysis: '+data.analysis);
-    if(data.tip) lines.push('🎯 Tip: '+data.tip);
-    if(data.confidence) lines.push('📈 Confidence: '+data.confidence);
-    if(data.kickoff) lines.push('🕒 Kickoff: '+data.kickoff);
-    if(data.notes) lines.push('📝 Notes: '+data.notes);
-
-    lines.push('\n⚠️ Disclaimer: All tips are predictions. Bet responsibly.');
-    return lines.join('\n');
+function addDays(days) {
+  return Date.now() + days * 24 * 60 * 60 * 1000;
 }
 
-// ====== SEND TIP TO SUBSCRIBERS ======
-function sendTipToSubscribers(tip) {
-    subscribers.forEach(s=>{
-        const active = checkSubscription(s.id);
-        if(tip.postType==='vip' && !active) return; // skip non-subscribed
-        bot.sendMessage(s.id, buildPost(tip));
-    });
-}
+/* ---------- USER COMMANDS ---------- */
 
-// ====== USER SUBSCRIBE ======
-bot.onText(/\/subscribe/, (msg) => {
-    const chatId = msg.chat.id;
-    bot.sendMessage(chatId, 'Select subscription:', {
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: 'Daily', callback_data: 'sub_daily' }],
-                [{ text: 'Weekly', callback_data: 'sub_weekly' }],
-                [{ text: 'Monthly', callback_data: 'sub_monthly' }],
-                [{ text: 'Yearly', callback_data: 'sub_yearly' }]
-            ]
-        }
-    });
+/>> HELP
+bot.onText(/\/help/, msg => {
+  bot.sendMessage(msg.chat.id,
+`📌 *MatchIQ Commands*
+
+/subscribe – Subscribe to VIP tips
+/status – Check your subscription
+/help – Show commands`, { parse_mode: 'Markdown' });
 });
 
-// ====== HANDLE SUBS ======
-bot.on('callback_query', (callbackQuery) => {
-    const chatId = callbackQuery.message.chat.id;
-    const data = callbackQuery.data;
-
-    if (data.startsWith('sub_')) {
-        let days=0, type='';
-        switch(data) {
-            case 'sub_daily': days=1; type='Daily'; break;
-            case 'sub_weekly': days=7; type='Weekly'; break;
-            case 'sub_monthly': days=30; type='Monthly'; break;
-            case 'sub_yearly': days=365; type='Yearly'; break;
-        }
-        const endDate = Date.now()+days*24*60*60*1000;
-        const existing = subscribers.find(s=>s.id==chatId);
-        if(existing){ existing.endDate=endDate; existing.subscriptionType=type; }
-        else { subscribers.push({id:chatId, username:callbackQuery.from.username, endDate, subscriptionType:type}); }
-        saveSubscribers();
-        bot.sendMessage(chatId, `✅ Subscribed for ${type}. Expires: ${new Date(endDate).toLocaleString()}`);
-        bot.answerCallbackQuery(callbackQuery.id);
+/>> SUBSCRIBE
+bot.onText(/\/subscribe/, msg => {
+  bot.sendMessage(msg.chat.id, 'Choose a plan 👇', {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '✅ Daily', callback_data: 'sub_daily' }],
+        [{ text: '✅ Weekly', callback_data: 'sub_weekly' }],
+        [{ text: '✅ Monthly', callback_data: 'sub_monthly' }],
+        [{ text: '✅ Yearly', callback_data: 'sub_yearly' }]
+      ]
     }
+  });
 });
 
-// ====== EXPRESS API ======
-app.post('/api/sendTip', (req,res)=>{
-    const { text, target } = req.body;
-    if(!text||!target) return res.status(400).json({error:'Missing fields'});
-    bot.sendMessage(target, text).then(()=>res.json({ok:true})).catch(err=>res.json({ok:false,error:err.message}));
+/>> STATUS
+bot.onText(/\/status/, msg => {
+  const db = loadDB();
+  const user = db.users[msg.from.id];
+
+  if (!user || user.expiry < Date.now()) {
+    return bot.sendMessage(msg.chat.id, '❌ You have no active subscription.');
+  }
+
+  const daysLeft = Math.ceil((user.expiry - Date.now()) / 86400000);
+  bot.sendMessage(msg.chat.id, `✅ Active VIP
+⏳ Days left: ${daysLeft}`);
 });
 
-app.listen(PORT,()=>console.log(`Server running on port ${PORT}`));
+/* ---------- CALLBACK HANDLER ---------- */
+
+bot.on('callback_query', q => {
+  if (!q.data.startsWith('sub_')) return;
+
+  const plan = q.data.split('_')[1];
+  const db = loadDB();
+
+  db.users[q.from.id] = {
+    username: q.from.username || '',
+    expiry: addDays(PLANS[plan])
+  };
+
+  saveDB(db);
+
+  bot.sendMessage(q.from.id,
+`✅ Subscription successful
+Plan: *${plan.toUpperCase()}*
+Access granted to VIP tips ✅`, { parse_mode: 'Markdown' });
+
+  bot.answerCallbackQuery(q.id);
+});
+
+/* ---------- ADMIN ---------- */
+
+bot.onText(/\/admin/, msg => {
+  if (!ADMIN_IDS.includes(msg.from.id)) {
+    return bot.sendMessage(msg.chat.id, '❌ Access denied');
+  }
+
+  bot.sendMessage(msg.chat.id,
+`🛠 *Admin Panel*
+
+/postvip – Post VIP tip
+/postfree – Post free tip
+/subscribers – View subscribers
+/broadcast – Send alert`,
+{ parse_mode: 'Markdown' });
+});
+
+/>> POST VIP
+bot.onText(/\/postvip (.+)/, (msg, match) => {
+  if (!ADMIN_IDS.includes(msg.from.id)) return;
+
+  const tip = match[1];
+  const db = loadDB();
+
+  for (const uid in db.users) {
+    if (db.users[uid].expiry > Date.now()) {
+      bot.sendMessage(uid, `🔥 *VIP TIP*\n${tip}`, { parse_mode: 'Markdown' });
+    }
+  }
+
+  bot.sendMessage(msg.chat.id, '✅ VIP tip sent');
+});
+
+/>> POST FREE
+bot.onText(/\/postfree (.+)/, (msg, match) => {
+  if (!ADMIN_IDS.includes(msg.from.id)) return;
+
+  bot.sendMessage(VIP_CHANNEL_ID,
+`⚽ *FREE TIP*\n${match[1]}`, { parse_mode: 'Markdown' });
+});
+
+/>> SUBSCRIBERS LIST
+bot.onText(/\/subscribers/, msg => {
+  if (!ADMIN_IDS.includes(msg.from.id)) return;
+
+  const db = loadDB();
+  let text = '👥 *Subscribers*\n\n';
+
+  for (const id in db.users) {
+    const days = Math.ceil((db.users[id].expiry - Date.now()) / 86400000);
+    text += `• ${id} — ${days} days\n`;
+  }
+
+  bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
+});
+
+/* ---------- AUTO EXPIRY CHECK ---------- */
+
+setInterval(() => {
+  const db = loadDB();
+
+  for (const id in db.users) {
+    if (db.users[id].expiry < Date.now()) {
+      bot.sendMessage(id, '⚠️ Your VIP subscription has expired.');
+      delete db.users[id];
+    }
+  }
+
+  saveDB(db);
+}, 3600000); // every hour
