@@ -1,27 +1,5 @@
-# Dependencies
 node_modules/
-
-# Environment variables (NEVER PUSH THIS)
 .env
-
-# Logs
+.env.*
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Firebase (if used later)
-.firebase/
-firebase-debug.log
-
-# Build / cache
-build/
-dist/
-.cache/
-
-# Editor settings
-.vscode/
-.idea/
+yarn.lock
