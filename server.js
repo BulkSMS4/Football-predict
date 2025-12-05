@@ -1,190 +1,193 @@
-// server.js
-require('dotenv').config(); // Load .env
+require('dotenv').config();
+const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
-const TelegramBot = require('node-telegram-bot-api');
-const express = require('express');
-const bodyParser = require('body-parser');
 
-const app = express();
-app.use(bodyParser.json());
+const token = process.env.BOT_TOKEN;
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID; // Your Telegram ID
+const bot = new TelegramBot(token, { polling: true });
 
-// Read from .env
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_ID = process.env.ADMIN_ID; // Your Telegram ID for admin
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD; // For admin dashboard commands
-
-if (!BOT_TOKEN || !ADMIN_ID || !ADMIN_PASSWORD) {
-  console.error("Please set BOT_TOKEN, ADMIN_ID, and ADMIN_PASSWORD in .env");
-  process.exit(1);
+// Load or initialize subscribers
+const subsFile = path.join(__dirname, 'subscribers.json');
+let subscribers = [];
+if (fs.existsSync(subsFile)) {
+  subscribers = JSON.parse(fs.readFileSync(subsFile));
 }
 
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+// Subscription options with Odds and Price
+const SUBS_OPTIONS = {
+  daily: [
+    { odds: 2, price: 10 },
+    { odds: 5, price: 25 },
+    { odds: 50, price: 200 },
+  ],
+  weekly: [
+    { odds: 2, price: 20 },
+    { odds: 5, price: 50 },
+    { odds: 50, price: 400 },
+  ],
+  monthly: [
+    { odds: 2, price: 60 },
+    { odds: 5, price: 150 },
+    { odds: 50, price: 1000 },
+  ],
+  yearly: [
+    { odds: 2, price: 600 },
+    { odds: 5, price: 1500 },
+    { odds: 50, price: 10000 },
+  ]
+};
 
-// Paths for storing data
-const SUBSCRIBERS_FILE = path.join(__dirname, 'subscribers.json');
-const ODDS_FILE = path.join(__dirname, 'odds.json');
-
-// Ensure files exist
-if (!fs.existsSync(SUBSCRIBERS_FILE)) fs.writeFileSync(SUBSCRIBERS_FILE, JSON.stringify([]));
-if (!fs.existsSync(ODDS_FILE)) fs.writeFileSync(ODDS_FILE, JSON.stringify({
-  daily: [],
-  weekly: [],
-  monthly: [],
-  yearly: []
-}));
-
-function readSubscribers() {
-  return JSON.parse(fs.readFileSync(SUBSCRIBERS_FILE, 'utf-8'));
+// Helper functions
+function saveSubscribers() {
+  fs.writeFileSync(subsFile, JSON.stringify(subscribers, null, 2));
 }
 
-function writeSubscribers(data) {
-  fs.writeFileSync(SUBSCRIBERS_FILE, JSON.stringify(data, null, 2));
+function getSubscriber(id) {
+  return subscribers.find(s => s.id === id);
 }
 
-function readOdds() {
-  return JSON.parse(fs.readFileSync(ODDS_FILE, 'utf-8'));
-}
-
-function checkSubscription(userId) {
-  const subs = readSubscribers();
-  const sub = subs.find(s => s.id === userId);
-  if (!sub) return null;
-  if (new Date(sub.endDate) < new Date()) return null; // expired
-  return sub;
+function subscriptionExpired(sub) {
+  return new Date() > new Date(sub.endDate);
 }
 
 // Commands
 bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id,
-    `Welcome! Available commands:\n`+
-    `/subscribe - Subscribe to VIP tips\n`+
-    `/status - Check your subscription\n`+
-    `/help - Show commands`
-  );
+  const chatId = msg.chat.id;
+  const text = `Welcome to MatchIQ Tips Bot!\n\nCommands:\n/subscribe - Subscribe to VIP tips\n/status - Check your subscription\n/history - View past tips\n/help - Show commands`;
+  bot.sendMessage(chatId, text);
 });
 
 bot.onText(/\/help/, (msg) => {
-  bot.sendMessage(msg.chat.id,
-    `Commands:\n`+
-    `/subscribe - Subscribe to VIP tips\n`+
-    `/status - Check your subscription\n`+
-    `/help - Show commands\n`+
-    `/admin - Admin access (restricted)`
-  );
-});
-
-// Check subscription status
-bot.onText(/\/status/, (msg) => {
-  const sub = checkSubscription(msg.from.id);
-  if (!sub) {
-    bot.sendMessage(msg.chat.id, `You do not have an active subscription. Use /subscribe to join VIP.`);
-  } else {
-    bot.sendMessage(msg.chat.id, 
-      `Subscription: ${sub.subscriptionType}\n` +
-      `Odds: ${sub.odds}\n` +
-      `Expires: ${new Date(sub.endDate).toLocaleString()}`
-    );
-  }
-});
-
-// Admin command with password
-bot.onText(/\/admin\s*(.*)/, (msg, match) => {
-  const password = match[1].trim();
-  if (msg.from.id.toString() !== ADMIN_ID || password !== ADMIN_PASSWORD) {
-    bot.sendMessage(msg.chat.id, `Access denied.`);
-    return;
-  }
-  const subs = readSubscribers();
-  let text = `Subscribers List (${subs.length}):\n`;
-  subs.forEach(s => {
-    text += `${s.username || s.first_name} - ${s.subscriptionType} - Odds: ${s.odds} - Expires: ${new Date(s.endDate).toLocaleString()}\n`;
-  });
-  bot.sendMessage(msg.chat.id, text || 'No subscribers yet.');
-});
-
-// Subscribe command
-bot.onText(/\/subscribe/, async (msg) => {
   const chatId = msg.chat.id;
-  const oddsData = readOdds();
-  const options = {
+  const text = `Commands:\n/subscribe - Subscribe to VIP tips or free tips\n/status - Check subscription status\n/history - View past tips\n/help - Show this message`;
+  bot.sendMessage(chatId, text);
+});
+
+bot.onText(/\/status/, (msg) => {
+  const chatId = msg.chat.id;
+  const sub = getSubscriber(chatId);
+  if (!sub || subscriptionExpired(sub)) {
+    return bot.sendMessage(chatId, "You do not have an active subscription. Use /subscribe to get VIP tips.");
+  }
+  bot.sendMessage(chatId, `Subscription: ${sub.type}\nExpires: ${new Date(sub.endDate).toLocaleString()}`);
+});
+
+bot.onText(/\/history/, (msg) => {
+  const chatId = msg.chat.id;
+  const sub = getSubscriber(chatId);
+  if (!sub || subscriptionExpired(sub)) return bot.sendMessage(chatId, "No access. Subscribe first.");
+  // Here you can send past tips from a JSON file or database
+  bot.sendMessage(chatId, "Here is your past tip history:\n(Example tip 1)\n(Example tip 2)");
+});
+
+// Subscribe
+bot.onText(/\/subscribe/, (msg) => {
+  const chatId = msg.chat.id;
+  const opts = {
     reply_markup: {
       inline_keyboard: [
-        [{ text: 'Daily', callback_data: 'sub_daily' }],
-        [{ text: 'Weekly', callback_data: 'sub_weekly' }],
-        [{ text: 'Monthly', callback_data: 'sub_monthly' }],
-        [{ text: 'Yearly', callback_data: 'sub_yearly' }],
-        [{ text: 'Free Game', callback_data: 'sub_free' }]
+        [{ text: "Daily", callback_data: "subscribe_daily" }],
+        [{ text: "Weekly", callback_data: "subscribe_weekly" }],
+        [{ text: "Monthly", callback_data: "subscribe_monthly" }],
+        [{ text: "Yearly", callback_data: "subscribe_yearly" }],
+        [{ text: "Free Game", callback_data: "subscribe_free" }],
       ]
     }
   };
-  bot.sendMessage(chatId, `Choose a subscription:`, options);
+  bot.sendMessage(chatId, "Choose your subscription:", opts);
 });
 
-// Handle subscription selection
+// Handle button clicks
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
-  const username = query.from.username || query.from.first_name;
-  const type = query.data;
+  const data = query.data;
 
-  if (type.startsWith('sub_')) {
-    const subType = type.replace('sub_', '');
-    const oddsData = readOdds();
+  if (data.startsWith("subscribe_")) {
+    const type = data.split("_")[1];
 
-    if (subType === 'free') {
-      bot.sendMessage(chatId, `You have access to the Free Game!`);
+    if (type === "free") {
+      bot.sendMessage(chatId, "You have selected the Free Game. Enjoy your free tips!");
       return;
     }
 
-    if (!oddsData[subType] || oddsData[subType].length === 0) {
-      bot.sendMessage(chatId, `No odds configured for ${subType}. Contact admin.`);
-      return;
-    }
+    // Show odds & prices
+    const options = SUBS_OPTIONS[type];
+    let text = `Subscription: ${type.toUpperCase()}\nAvailable Odds & Prices:\n`;
+    options.forEach(o => text += `${o.odds} Odds - $${o.price}\n`);
+    text += "\nAfter payment, send a screenshot/receipt here.";
 
-    let text = `Choose odds for ${subType} subscription:\n`;
-    oddsData[subType].forEach((o, i) => {
-      text += `${i+1}. Odds: ${o.odds} - Price: ${o.price}\n`;
-    });
-    bot.sendMessage(chatId, text + `\nAfter payment, send screenshot/receipt to verify.`);
-    
-    const subs = readSubscribers();
-    subs.push({ id: query.from.id, username, subscriptionType: subType, pending: true });
-    writeSubscribers(subs);
+    // Save pending subscription
+    let sub = getSubscriber(chatId);
+    if (!sub) {
+      sub = { id: chatId, pendingType: type };
+      subscribers.push(sub);
+    } else {
+      sub.pendingType = type;
+    }
+    saveSubscribers();
+
+    bot.sendMessage(chatId, text);
   }
 });
 
-// Receive receipt image
+// Receive payment screenshots
 bot.on('photo', (msg) => {
   const chatId = msg.chat.id;
-  const subs = readSubscribers();
-  const pending = subs.find(s => s.id === chatId && s.pending);
-  if (!pending) {
-    bot.sendMessage(chatId, `No pending subscription found. Use /subscribe to start.`);
-    return;
-  }
+  const sub = getSubscriber(chatId);
+  if (!sub || !sub.pendingType) return;
 
-  const photo = msg.photo[msg.photo.length - 1].file_id;
-  bot.sendPhoto(ADMIN_ID, photo, { caption: `Payment proof from ${pending.username} for ${pending.subscriptionType} subscription.` });
-  bot.sendMessage(chatId, `Payment sent to admin for verification. You will get confirmation once approved.`);
+  const photo = msg.photo[msg.photo.length - 1]; // best quality
+  const fileId = photo.file_id;
 
-  pending.receiptSent = true;
-  writeSubscribers(subs);
+  // Send to admin for verification
+  bot.sendPhoto(ADMIN_CHAT_ID, fileId, { caption: `Payment screenshot from user ${chatId}. Subscription type: ${sub.pendingType}` });
+
+  bot.sendMessage(chatId, "Payment received. Admin will verify and activate your subscription.");
 });
 
-// Express endpoint to send tips
-app.post('/api/sendTip', (req, res) => {
-  const { text, target } = req.body;
-  if (!text || !target) return res.status(400).json({ error: 'Missing text or target' });
-  bot.sendMessage(target, text).then(() => {
-    res.json({ success: true });
-  }).catch(err => res.status(500).json({ error: err.message }));
+// Admin approval simulation (you can implement real approval)
+bot.onText(/\/approve (\d+)/, (msg, match) => {
+  const adminId = msg.chat.id;
+  if (adminId != ADMIN_CHAT_ID) return;
+
+  const userId = parseInt(match[1]);
+  const sub = getSubscriber(userId);
+  if (!sub || !sub.pendingType) return bot.sendMessage(adminId, "User not found or no pending subscription.");
+
+  const type = sub.pendingType;
+  let days = 1;
+  if (type === "daily") days = 1;
+  else if (type === "weekly") days = 7;
+  else if (type === "monthly") days = 30;
+  else if (type === "yearly") days = 365;
+
+  sub.type = type;
+  sub.startDate = new Date().toISOString();
+  sub.endDate = new Date(Date.now() + days*24*60*60*1000).toISOString();
+  delete sub.pendingType;
+  saveSubscribers();
+
+  bot.sendMessage(userId, `✅ Your ${type} subscription is now active! Expires on ${sub.endDate}`);
+  bot.sendMessage(adminId, `User ${userId} subscription activated.`);
 });
 
-// Endpoint to get subscribers
-app.get('/api/subscribers', (req, res) => {
-  const subs = readSubscribers();
-  res.json(subs.filter(s => !s.pending));
-});
+// Auto notify expired subscriptions
+setInterval(() => {
+  const now = new Date();
+  subscribers.forEach(s => {
+    if (!s.type || !s.endDate) return;
+    const end = new Date(s.endDate);
+    if (now > end && !s.expiredNotified) {
+      bot.sendMessage(s.id, "⚠️ Your subscription has expired. Please renew using /subscribe.");
+      s.expiredNotified = true;
+      saveSubscribers();
+    } else if ((end - now) < 24*60*60*1000 && !s.warned) {
+      bot.sendMessage(s.id, "⏰ Your subscription will expire in less than 24 hours. Renew soon!");
+      s.warned = true;
+      saveSubscribers();
+    }
+  });
+}, 60*60*1000); // check every hour
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+console.log("MatchIQ Bot is running...");
