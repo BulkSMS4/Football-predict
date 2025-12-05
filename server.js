@@ -9,7 +9,7 @@ const bodyParser = require('body-parser');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'forgetme';
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || null; // optional
 
 const SUBSCRIBE_FILE = path.join(__dirname, 'subscribe.json');
